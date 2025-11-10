@@ -4,8 +4,8 @@
  * Updated to fix API data format issues
  */
 
-// API Base URL
-const API_BASE = '/api/squash';
+// API Base URL - Use absolute URL for WordPress embedding
+const API_BASE = 'https://stats.squashplayers.app/api/squash';
 
 // Chart.js default configuration
 Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
