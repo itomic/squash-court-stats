@@ -5,9 +5,9 @@
 
 PLUGIN_NAME="squash-stats-dashboard"
 VERSION="1.1.0"
-OUTPUT_FILE="${PLUGIN_NAME}-${VERSION}.zip"
+OUTPUT_FILE="${PLUGIN_NAME}.zip"  # Remove version from filename
 
-echo "Packaging ${PLUGIN_NAME} plugin..."
+echo "Packaging ${PLUGIN_NAME} plugin (v${VERSION})..."
 
 # Create temporary directory
 mkdir -p temp/${PLUGIN_NAME}

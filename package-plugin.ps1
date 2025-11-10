@@ -3,9 +3,9 @@
 
 $PLUGIN_NAME = "squash-stats-dashboard"
 $VERSION = "1.1.0"
-$OUTPUT_FILE = "$PLUGIN_NAME-$VERSION.zip"
+$OUTPUT_FILE = "$PLUGIN_NAME.zip"  # Remove version from filename
 
-Write-Host "Packaging $PLUGIN_NAME plugin..." -ForegroundColor Green
+Write-Host "Packaging $PLUGIN_NAME plugin (v$VERSION)..." -ForegroundColor Green
 
 # Create temporary directory with correct structure
 New-Item -ItemType Directory -Force -Path "temp\$PLUGIN_NAME" | Out-Null
