@@ -3,7 +3,7 @@ Contributors: itomicapps
 Tags: squash, statistics, dashboard, sports, analytics
 Requires at least: 5.0
 Tested up to: 6.7
-Stable tag: 1.1.0
+Stable tag: 1.2.0
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -19,6 +19,7 @@ The Squash Stats Dashboard plugin allows you to embed comprehensive squash venue
 * **Shortcode Based:** Use `[squash_stats_dashboard]` anywhere
 * **Flexible:** Create any page/URL you want
 * **No iFrame:** Direct HTML injection for better performance and SEO
+* **Auto-Updates:** Automatic update notifications from GitHub releases
 * **Smart Caching:** Intelligent caching of manifest and content
 * **Multiple Instances:** Use on multiple pages if needed
 * **Customizable:** Optional height and CSS class parameters
@@ -98,6 +99,13 @@ Yes! The shortcode should work with most page builders that support WordPress sh
 4. Dashboard statistics overview
 
 == Changelog ==
+
+= 1.2.0 (2025-11-11) =
+* Added automatic update checking from GitHub releases
+* Plugin now notifies when new versions are available
+* Supports WordPress auto-update system
+* Fixed API URLs to use absolute paths for cross-domain embedding
+* Improved caching for better performance
 
 = 1.1.0 (2025-11-10) =
 * Added shortcode-based system for maximum flexibility
