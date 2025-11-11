@@ -29,6 +29,13 @@
 
 # Enable geolocation and CORS for cross-origin embedding
 <IfModule mod_headers.c>
+    # Remove X-Frame-Options to allow iframe embedding on any domain
+    Header unset X-Frame-Options
+    
+    # Use Content-Security-Policy frame-ancestors instead (more modern and flexible)
+    # Allow embedding on any domain for WordPress plugin usage
+    Header always set Content-Security-Policy "frame-ancestors *"
+    
     Header always set Permissions-Policy "geolocation=(self)"
     
     # Allow CORS for JavaScript/CSS assets to be loaded by any WordPress site using our plugin
