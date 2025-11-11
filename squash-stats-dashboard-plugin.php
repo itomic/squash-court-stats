@@ -3,7 +3,7 @@
  * Plugin Name: Squash Stats Dashboard
  * Plugin URI: https://stats.squashplayers.app
  * Description: Embeds the Squash Stats Dashboard from stats.squashplayers.app into WordPress using shortcode [squash_stats_dashboard]
- * Version: 1.2.0
+ * Version: 1.2.2
  * Author: Itomic Apps
  * Author URI: https://www.itomic.com.au
  * License: GPL v2 or later
@@ -188,8 +188,7 @@ class Squash_Stats_Dashboard {
                 preg_match('/<body[^>]*>(.*?)<\/body>/is', $html, $matches);
                 $content = isset($matches[1]) ? $matches[1] : '';
                 
-                // Update asset URLs to use absolute paths
-                $content = str_replace('/build/', $this->dashboard_url . '/build/', $content);
+                // No URL replacement needed - Laravel app already outputs absolute URLs
                 
                 // Cache for 5 minutes
                 set_transient($transient_key, $content, 5 * MINUTE_IN_SECONDS);

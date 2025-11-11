@@ -2,6 +2,9 @@
     <IfModule mod_negotiation.c>
         Options -MultiViews -Indexes
     </IfModule>
+    
+    # Enable following symlinks for LiteSpeed
+    Options +FollowSymLinks
 
     RewriteEngine On
 
@@ -18,14 +21,21 @@
     RewriteCond %{REQUEST_URI} (.+)/$
     RewriteRule ^ %1 [L,R=301]
 
-    # Send Requests To Front Controller...
+    # Send Requests To Front Controller (including /build/ for CORS headers via Laravel)
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
 </IfModule>
 
-# Enable geolocation for this site
+# Enable geolocation and CORS for cross-origin embedding
 <IfModule mod_headers.c>
     Header always set Permissions-Policy "geolocation=(self)"
+    
+    # Allow CORS for JavaScript/CSS assets to be loaded by any WordPress site using our plugin
+    <FilesMatch "\.(js|css|json)$">
+        Header set Access-Control-Allow-Origin "*"
+        Header set Access-Control-Allow-Methods "GET, OPTIONS"
+        Header set Access-Control-Allow-Headers "Content-Type"
+    </FilesMatch>
 </IfModule>
 
