@@ -3,7 +3,7 @@
  * Plugin Name: Squash Stats Dashboard
  * Plugin URI: https://stats.squashplayers.app
  * Description: Embeds the Squash Stats Dashboard from stats.squashplayers.app into WordPress using shortcode [squash_stats_dashboard]
- * Version: 1.3.1
+ * Version: 1.3.2
  * Author: Itomic Apps
  * Author URI: https://www.itomic.com.au
  * License: GPL v2 or later
@@ -16,8 +16,11 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-// Load the updater class
-require_once plugin_dir_path(__FILE__) . 'includes/class-plugin-updater.php';
+// Load the updater class (only for self-hosted installations, not WordPress.org)
+// WordPress.org plugins must use the built-in update system
+if (file_exists(plugin_dir_path(__FILE__) . 'includes/class-plugin-updater.php')) {
+    require_once plugin_dir_path(__FILE__) . 'includes/class-plugin-updater.php';
+}
 
 class Squash_Stats_Dashboard {
     
@@ -146,8 +149,9 @@ class Squash_Stats_Dashboard {
 // Initialize the plugin
 new Squash_Stats_Dashboard();
 
-// Initialize the updater
-if (is_admin()) {
+// Initialize the updater (only if the class exists - for self-hosted installations)
+// WordPress.org plugins use the built-in update system and should not include this file
+if (is_admin() && class_exists('Squash_Stats_Dashboard_Updater')) {
     new Squash_Stats_Dashboard_Updater(
         plugin_basename(__FILE__),
         'itomicspaceman/spa-stats-dashboard'

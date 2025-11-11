@@ -2,8 +2,8 @@
 Contributors: itomicapps
 Tags: squash, statistics, dashboard, sports, analytics
 Requires at least: 5.0
-Tested up to: 6.7
-Stable tag: 1.3.1
+Tested up to: 6.8
+Stable tag: 1.3.2
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -99,6 +99,12 @@ Yes! The shortcode should work with most page builders that support WordPress sh
 4. Dashboard statistics overview
 
 == Changelog ==
+
+= 1.3.2 (2025-11-11) =
+* Fixed WordPress Plugin Check compatibility issues
+* Made auto-updater conditional (only loads for self-hosted installations)
+* Updated "Tested up to" to WordPress 6.8
+* Plugin now passes WordPress.org plugin checks
 
 = 1.3.1 (2025-11-11) =
 * Added full-width CSS to make dashboard span entire page width

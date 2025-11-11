@@ -142,6 +142,13 @@ GPL v2 or later
 
 ## Changelog
 
+### 1.3.2 (2025-11-11)
+- Fixed WordPress Plugin Check compatibility issues
+- Made auto-updater conditional (only loads for self-hosted installations)
+- Updated "Tested up to" to WordPress 6.8
+- Plugin now passes WordPress.org plugin checks
+- Auto-updater gracefully skips if class file not present
+
 ### 1.3.1 (2025-11-11)
 - Added full-width CSS to make dashboard span entire page width
 - Dashboard now breaks out of WordPress content containers

@@ -2,7 +2,7 @@
 # This script creates a zip file ready for WordPress installation
 
 $PLUGIN_NAME = "squash-stats-dashboard"
-$VERSION = "1.3.1"
+$VERSION = "1.3.2"
 $OUTPUT_FILE = "$PLUGIN_NAME.zip"  # Remove version from filename
 
 Write-Host "Packaging $PLUGIN_NAME plugin (v$VERSION)..." -ForegroundColor Green
