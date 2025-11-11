@@ -81,18 +81,6 @@ async function initMap() {
         showCompass: false
     }), 'top-right');
     
-    // Add geolocate control (find user's location)
-    map.addControl(
-        new maplibregl.GeolocateControl({
-            positionOptions: {
-                enableHighAccuracy: true
-            },
-            trackUserLocation: true,
-            showUserHeading: true
-        }),
-        'top-right'
-    );
-    
     // Add custom "Reset to Global View" button using Font Awesome globe icon
     class ResetControl {
         onAdd(map) {
