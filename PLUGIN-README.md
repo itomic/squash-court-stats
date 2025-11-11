@@ -142,6 +142,12 @@ GPL v2 or later
 
 ## Changelog
 
+### 1.3.1 (2025-11-11)
+- Added full-width CSS to make dashboard span entire page width
+- Dashboard now breaks out of WordPress content containers
+- Uses viewport width (100vw) for edge-to-edge display
+- Matches width of page header and navigation
+
 ### 1.3.0 (2025-11-11) - MAJOR REFACTOR
 - **Switched to iframe-based embedding** for complete isolation
 - Eliminates all JavaScript and CSS conflicts with WordPress themes/plugins

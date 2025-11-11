@@ -3,7 +3,7 @@
  * Plugin Name: Squash Stats Dashboard
  * Plugin URI: https://stats.squashplayers.app
  * Description: Embeds the Squash Stats Dashboard from stats.squashplayers.app into WordPress using shortcode [squash_stats_dashboard]
- * Version: 1.3.0
+ * Version: 1.3.1
  * Author: Itomic Apps
  * Author URI: https://www.itomic.com.au
  * License: GPL v2 or later
@@ -26,6 +26,41 @@ class Squash_Stats_Dashboard {
     public function __construct() {
         // Register shortcode
         add_shortcode('squash_stats_dashboard', array($this, 'render_dashboard_shortcode'));
+        
+        // Add CSS for full-width iframe
+        add_action('wp_head', array($this, 'add_dashboard_styles'));
+    }
+    
+    /**
+     * Add CSS to make the dashboard iframe full-width
+     * This breaks the iframe out of WordPress content containers
+     */
+    public function add_dashboard_styles() {
+        global $post;
+        
+        // Only add styles if the shortcode is present
+        if (is_a($post, 'WP_Post') && has_shortcode($post->post_content, 'squash_stats_dashboard')) {
+            ?>
+            <style>
+                /* Full-width dashboard container */
+                .squash-dashboard-wrapper {
+                    width: 100vw;
+                    position: relative;
+                    left: 50%;
+                    right: 50%;
+                    margin-left: -50vw;
+                    margin-right: -50vw;
+                    max-width: 100vw;
+                }
+                
+                /* Ensure iframe is full width within wrapper */
+                .squash-dashboard-iframe {
+                    width: 100%;
+                    display: block;
+                }
+            </style>
+            <?php
+        }
     }
     
     /**
@@ -47,8 +82,11 @@ class Squash_Stats_Dashboard {
         // Generate unique ID for this iframe instance
         $iframe_id = 'squash-dashboard-' . uniqid();
         
+        // Wrap iframe in full-width container
+        $html = '<div class="squash-dashboard-wrapper">';
+        
         // Build iframe HTML
-        $html = sprintf(
+        $html .= sprintf(
             '<iframe 
                 id="%s"
                 src="%s" 
@@ -97,6 +135,9 @@ class Squash_Stats_Dashboard {
             </script>',
             esc_js($iframe_id)
         );
+        
+        // Close wrapper div
+        $html .= '</div>';
         
         return $html;
     }
