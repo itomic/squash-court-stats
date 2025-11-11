@@ -3,7 +3,7 @@
  * Plugin Name: Squash Stats Dashboard
  * Plugin URI: https://stats.squashplayers.app
  * Description: Embeds the Squash Stats Dashboard from stats.squashplayers.app into WordPress using shortcode [squash_stats_dashboard]
- * Version: 1.2.2
+ * Version: 1.2.3
  * Author: Itomic Apps
  * Author URI: https://www.itomic.com.au
  * License: GPL v2 or later
@@ -74,6 +74,9 @@ class Squash_Stats_Dashboard {
     
     /**
      * Enqueue dashboard assets
+     * 
+     * NOTE: We only enqueue CSS here. JavaScript is already included in the fetched HTML
+     * from stats.squashplayers.app to avoid double initialization.
      */
     public function enqueue_dashboard_assets() {
         // Prevent multiple enqueueing
@@ -82,12 +85,13 @@ class Squash_Stats_Dashboard {
         }
         
         $this->assets_enqueued = true;
+        
         // Get the manifest to find the hashed asset filenames
         $manifest_url = $this->dashboard_url . '/build/manifest.json';
         $manifest = $this->fetch_manifest($manifest_url);
         
         if ($manifest) {
-            // Enqueue CSS
+            // Enqueue CSS only - JS is already in the HTML
             if (isset($manifest['resources/css/app.css'])) {
                 wp_enqueue_style(
                     'squash-dashboard-app',
@@ -97,48 +101,12 @@ class Squash_Stats_Dashboard {
                 );
             }
             
-            // Enqueue JS
-            if (isset($manifest['resources/js/dashboard.js'])) {
-                wp_enqueue_script(
-                    'squash-dashboard-js',
-                    $this->dashboard_url . '/build/' . $manifest['resources/js/dashboard.js']['file'],
-                    array(),
-                    null,
-                    true
-                );
-            }
-            
-            // Enqueue MapLibre GL JS and CSS
+            // Enqueue MapLibre GL CSS only
             wp_enqueue_style(
                 'maplibre-gl',
                 'https://unpkg.com/maplibre-gl@4.0.0/dist/maplibre-gl.css',
                 array(),
                 '4.0.0'
-            );
-            
-            wp_enqueue_script(
-                'maplibre-gl',
-                'https://unpkg.com/maplibre-gl@4.0.0/dist/maplibre-gl.js',
-                array(),
-                '4.0.0',
-                true
-            );
-            
-            // Enqueue Chart.js and plugins
-            wp_enqueue_script(
-                'chartjs',
-                'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js',
-                array(),
-                '4.4.0',
-                true
-            );
-            
-            wp_enqueue_script(
-                'chartjs-datalabels',
-                'https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js',
-                array('chartjs'),
-                '2.2.0',
-                true
             );
             
             // Font Awesome

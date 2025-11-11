@@ -3,7 +3,7 @@ Contributors: itomicapps
 Tags: squash, statistics, dashboard, sports, analytics
 Requires at least: 5.0
 Tested up to: 6.7
-Stable tag: 1.2.0
+Stable tag: 1.2.3
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -99,6 +99,10 @@ Yes! The shortcode should work with most page builders that support WordPress sh
 4. Dashboard statistics overview
 
 == Changelog ==
+
+= 1.2.3 (2025-11-11) =
+* Fixed double initialization issue by removing duplicate JavaScript enqueueing
+* JavaScript is now only loaded once from the fetched HTML
 
 = 1.2.0 (2025-11-11) =
 * Added automatic update checking from GitHub releases

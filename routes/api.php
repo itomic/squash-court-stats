@@ -15,8 +15,9 @@ use Illuminate\Support\Facades\Route;
 */
 
 // Determine rate limit based on environment
-$rateLimit = app()->environment('local') ? '1000,1' : '60,1';
-$mapRateLimit = app()->environment('local') ? '1000,1' : '20,1';
+// Production: 300 req/min for stats (5 per second), 120 req/min for map (2 per second)
+$rateLimit = app()->environment('local') ? '1000,1' : '300,1';
+$mapRateLimit = app()->environment('local') ? '1000,1' : '120,1';
 
 // Aggregate statistics endpoints
 Route::prefix('squash')->middleware("throttle:{$rateLimit}")->group(function () {

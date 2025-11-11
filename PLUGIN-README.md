@@ -142,6 +142,10 @@ GPL v2 or later
 
 ## Changelog
 
+### 1.2.3 (2025-11-11)
+- Fixed double initialization issue by removing duplicate JavaScript enqueueing
+- JavaScript is now only loaded once from the fetched HTML
+
 ### 1.1.0 (2025-11-10)
 - **BREAKING CHANGE:** Switched from custom URL to shortcode-based system
 - Added `[squash_stats_dashboard]` shortcode
