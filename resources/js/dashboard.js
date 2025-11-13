@@ -165,6 +165,47 @@ async function updateSummaryStats(filter = null) {
 }
 
 /**
+ * Add standard map controls (zoom +/-, reset globe button)
+ * @param {maplibregl.Map} map - MapLibre map instance
+ * @param {Object} resetOptions - Options for reset button {center, zoom}
+ */
+function addStandardMapControls(map, resetOptions = {center: [0, 20], zoom: 1.5}) {
+    // Add navigation controls (zoom in/out only, no compass)
+    map.addControl(new maplibregl.NavigationControl({
+        showCompass: false
+    }), 'top-right');
+    
+    // Add custom "Reset to Global View" button using Font Awesome globe icon
+    class ResetControl {
+        onAdd(map) {
+            this._map = map;
+            this._container = document.createElement('div');
+            this._container.className = 'maplibregl-ctrl maplibregl-ctrl-group';
+            this._container.innerHTML = `
+                <button type="button" title="Reset to global view" aria-label="Reset to global view" style="font-size: 20px;">
+                    <i class="fas fa-earth-americas" style="color: #333;"></i>
+                </button>
+            `;
+            this._container.querySelector('button').addEventListener('click', () => {
+                map.flyTo({
+                    center: resetOptions.center,
+                    zoom: resetOptions.zoom,
+                    duration: 1000
+                });
+            });
+            return this._container;
+        }
+        
+        onRemove() {
+            this._container.parentNode.removeChild(this._container);
+            this._map = undefined;
+        }
+    }
+    
+    map.addControl(new ResetControl(), 'top-right');
+}
+
+/**
  * Initialize MapLibre GL map with venue markers
  * @param {string|null} filter - Geographic filter
  */
@@ -197,39 +238,8 @@ async function initMap(filter = null) {
         zoom: 1.5
     });
 
-    // Add navigation controls (zoom in/out only, no compass)
-    map.addControl(new maplibregl.NavigationControl({
-        showCompass: false
-    }), 'top-right');
-    
-    // Add custom "Reset to Global View" button using Font Awesome globe icon
-    class ResetControl {
-        onAdd(map) {
-            this._map = map;
-            this._container = document.createElement('div');
-            this._container.className = 'maplibregl-ctrl maplibregl-ctrl-group';
-            this._container.innerHTML = `
-                <button type="button" title="Reset to global view" aria-label="Reset to global view" style="font-size: 20px;">
-                    <i class="fas fa-earth-americas" style="color: #333;"></i>
-                </button>
-            `;
-            this._container.querySelector('button').addEventListener('click', () => {
-                map.flyTo({
-                    center: [0, 20],
-                    zoom: 1.5,
-                    duration: 1000
-                });
-            });
-            return this._container;
-        }
-        
-        onRemove() {
-            this._container.parentNode.removeChild(this._container);
-            this._map = undefined;
-        }
-    }
-    
-    map.addControl(new ResetControl(), 'top-right');
+    // Add standard map controls
+    addStandardMapControls(map);
 
     map.on('load', () => {
         console.log('Map loaded! Adding layers...');
@@ -272,20 +282,24 @@ async function initMap(filter = null) {
                 'circle-color': [
                     'step',
                     ['get', 'point_count'],
-                    '#51bbd6',
+                    '#51bbd6',    // < 10: Light blue
                     10,
-                    '#f1f075',
+                    '#f1f075',    // 10-49: Yellow
                     50,
-                    '#f28cb1'
+                    '#f28cb1',    // 50-999: Pink
+                    1000,
+                    '#ff6b6b'     // 1000+: Red
                 ],
                 'circle-radius': [
                     'step',
                     ['get', 'point_count'],
-                    20,
+                    20,           // < 10: 20px
                     10,
-                    30,
+                    30,           // 10-49: 30px
                     50,
-                    40
+                    40,           // 50-999: 40px
+                    1000,
+                    55            // 1000+: 55px
                 ]
             }
         });
@@ -714,12 +728,12 @@ async function createTopVenuesByCountsChart(filter = null) {
     }
     const ctx = canvas.getContext('2d');
     
-    // Build venue labels with name and physical address, add link icon
+    // Build venue labels with name and physical address
     const labels = data.map(venue => {
         // Use the actual physical address
         const address = venue.physical_address || '';
         const label = address ? `${venue.name} (${address})` : venue.name;
-        return label + ' 🔗'; // Add link emoji to indicate clickability
+        return label;
     });
     
     new Chart(ctx, {
@@ -810,8 +824,7 @@ async function createTopVenuesByCountsChart(filter = null) {
                             size: 10
                         },
                         autoSkip: false,
-                        color: '#0066cc',
-                        cursor: 'pointer'
+                        color: '#333'
                     }
                 }
             }
@@ -1310,6 +1323,1196 @@ async function createTimelineChart(filter = null) {
 }
 
 /**
+ * Initialize Countries Without Venues Choropleth Map
+ */
+async function initCountriesWithoutVenuesMap() {
+    const mapContainer = document.getElementById('countries-without-map');
+    if (!mapContainer) {
+        console.warn('Countries without venues map container not found');
+        return;
+    }
+
+    // Fetch countries without venues
+    const countriesWithoutVenues = await fetchData('/countries-without-venues');
+    if (!countriesWithoutVenues) return;
+
+    // Update count
+    const countElement = document.getElementById('countries-without-count');
+    if (countElement) {
+        countElement.textContent = countriesWithoutVenues.length;
+    }
+
+    // Create a Set of ISO alpha-2 codes for countries without venues
+    const countriesWithoutSet = new Set(countriesWithoutVenues.map(c => c.alpha_2_code));
+
+    // Initialize map
+    const map = new maplibregl.Map({
+        container: 'countries-without-map',
+        style: {
+            version: 8,
+            sources: {
+                'countries': {
+                    type: 'vector',
+                    url: 'https://demotiles.maplibre.org/tiles/tiles.json'
+                }
+            },
+            layers: [
+                {
+                    id: 'background',
+                    type: 'background',
+                    paint: {
+                        'background-color': '#f0f9ff'
+                    }
+                }
+            ]
+        },
+        center: [0, 20],
+        zoom: 1.5,
+        maxZoom: 6
+    });
+
+    // Add standard map controls
+    addStandardMapControls(map);
+
+    map.on('load', async () => {
+        // Fetch GeoJSON country boundaries from Natural Earth
+        const response = await fetch('https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson');
+        const geojson = await response.json();
+
+        // Add source
+        map.addSource('countries-data', {
+            type: 'geojson',
+            data: geojson
+        });
+
+        // Add fill layer with color coding
+        map.addLayer({
+            id: 'countries-fill',
+            type: 'fill',
+            source: 'countries-data',
+            paint: {
+                'fill-color': [
+                    'case',
+                    ['in', ['get', 'ISO_A2'], ['literal', Array.from(countriesWithoutSet)]],
+                    '#ef4444', // Red for countries without venues
+                    '#10b981'  // Green for countries with venues
+                ],
+                'fill-opacity': 0.7
+            }
+        });
+
+        // Add border layer
+        map.addLayer({
+            id: 'countries-border',
+            type: 'line',
+            source: 'countries-data',
+            paint: {
+                'line-color': '#ffffff',
+                'line-width': 1
+            }
+        });
+
+        // Add hover effect
+        map.on('mousemove', 'countries-fill', (e) => {
+            if (e.features.length > 0) {
+                map.getCanvas().style.cursor = 'pointer';
+                
+                const country = e.features[0];
+                const countryName = country.properties.NAME;
+                const iso = country.properties.ISO_A2;
+                const hasVenues = !countriesWithoutSet.has(iso);
+                
+                // Create popup
+                new maplibregl.Popup({
+                    closeButton: false,
+                    closeOnClick: false
+                })
+                .setLngLat(e.lngLat)
+                .setHTML(`
+                    <div style="padding: 8px;">
+                        <strong>${countryName}</strong><br>
+                        <span style="color: ${hasVenues ? '#10b981' : '#ef4444'};">
+                            ${hasVenues ? '✓ Has squash venues' : '✗ No squash venues'}
+                        </span>
+                    </div>
+                `)
+                .addTo(map);
+            }
+        });
+
+        map.on('mouseleave', 'countries-fill', () => {
+            map.getCanvas().style.cursor = '';
+            // Remove all popups
+            document.querySelectorAll('.maplibregl-popup').forEach(popup => popup.remove());
+        });
+    });
+
+    // Populate country list
+    const listContent = document.getElementById('country-list-content');
+    if (listContent && countriesWithoutVenues.length > 0) {
+        // Group by first letter
+        const grouped = {};
+        countriesWithoutVenues.forEach(country => {
+            const firstLetter = country.name[0].toUpperCase();
+            if (!grouped[firstLetter]) {
+                grouped[firstLetter] = [];
+            }
+            grouped[firstLetter].push(country);
+        });
+
+        let html = '';
+        Object.keys(grouped).sort().forEach(letter => {
+            html += `<div class="col-12"><h6 class="text-muted mb-2">${letter}</h6></div>`;
+            grouped[letter].forEach(country => {
+                html += `<div class="col-md-4 col-sm-6"><span class="badge bg-light text-dark">${country.name}</span></div>`;
+            });
+        });
+
+        listContent.innerHTML = html;
+    }
+}
+
+/**
+ * Initialize Highest Venues Map (Trivia)
+ */
+async function initHighestVenuesMap() {
+    const mapContainer = document.getElementById('highest-venues-map');
+    if (!mapContainer) {
+        console.warn('Highest venues map container not found');
+        return;
+    }
+
+    // Fetch venues with elevation
+    const allVenues = await fetchData('/venues-with-elevation');
+    if (!allVenues || allVenues.length === 0) return;
+
+    // Filter to only show venues at 2000m or higher
+    const venues = allVenues.filter(v => v.elevation >= 2000);
+
+    // Update count
+    const countElement = document.getElementById('venues-count');
+    if (countElement) {
+        countElement.textContent = `${venues.length} venues`;
+    }
+
+    // Function to get color based on elevation (simplified for 2000m+)
+    function getElevationColor(elevation) {
+        if (elevation < 3000) return '#fbbf24'; // Yellow (2000-3000m)
+        if (elevation < 3500) return '#f97316'; // Orange (3000-3500m)
+        return '#dc2626'; // Red (3500m+)
+    }
+
+    // Initialize map
+    const map = new maplibregl.Map({
+        container: 'highest-venues-map',
+        style: {
+            version: 8,
+            glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
+            sources: {
+                'osm': {
+                    type: 'raster',
+                    tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                    tileSize: 256,
+                    attribution: '© OpenStreetMap contributors'
+                }
+            },
+            layers: [
+                {
+                    id: 'osm-tiles',
+                    type: 'raster',
+                    source: 'osm',
+                    minzoom: 0,
+                    maxzoom: 19
+                }
+            ]
+        },
+        center: [0, 20],
+        zoom: 1.5
+    });
+
+    // Add standard map controls
+    addStandardMapControls(map);
+
+    // Store all markers for filtering
+    let allMarkers = [];
+
+    map.on('load', () => {
+        // Calculate bounds to fit all venues
+        const bounds = new maplibregl.LngLatBounds();
+        venues.forEach(venue => {
+            bounds.extend([venue.longitude, venue.latitude]);
+        });
+        
+        // Fit map to show all venues with padding
+        map.fitBounds(bounds, {
+            padding: {top: 50, bottom: 50, left: 50, right: 50},
+            maxZoom: 15,
+            duration: 0
+        });
+        
+        // Add markers for each venue
+        venues.forEach(venue => {
+            const el = document.createElement('div');
+            el.className = 'elevation-marker';
+            el.style.backgroundColor = getElevationColor(venue.elevation);
+            el.style.width = '12px';
+            el.style.height = '12px';
+            el.style.borderRadius = '50%';
+            el.style.border = '2px solid white';
+            el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
+            el.style.cursor = 'pointer';
+
+            const marker = new maplibregl.Marker({element: el})
+                .setLngLat([venue.longitude, venue.latitude])
+                .setPopup(
+                    new maplibregl.Popup({offset: 15})
+                        .setHTML(`
+                            <div style="padding: 8px; min-width: 200px;">
+                                <strong>${venue.name}</strong><br>
+                                <span class="text-muted small">${venue.address || venue.suburb || ''}, ${venue.country}</span><br>
+                                <div class="mt-2">
+                                    <span style="color: ${getElevationColor(venue.elevation)}; font-weight: bold;">
+                                        ⛰️ ${venue.elevation}m
+                                    </span>
+                                    <span class="text-muted small ms-2">
+                                        🎾 ${venue.courts} court${venue.courts !== 1 && venue.courts !== 'Unknown' ? 's' : ''}
+                                    </span>
+                                </div>
+                            </div>
+                        `)
+                )
+                .addTo(map);
+
+            allMarkers.push({marker, venue});
+        });
+    });
+
+    // Populate top 10 list
+    const listContent = document.getElementById('top-venues-list-content');
+    if (listContent) {
+        const top10 = venues.slice(0, 10);
+        let html = '<ol class="list-group list-group-numbered">';
+        top10.forEach(venue => {
+            html += `
+                <li class="list-group-item d-flex justify-content-between align-items-start">
+                    <div class="ms-2 me-auto">
+                        <div class="fw-bold">${venue.name}</div>
+                        <small class="text-muted">${venue.suburb || venue.state || ''}, ${venue.country}</small>
+                    </div>
+                    <span class="badge" style="background-color: ${getElevationColor(venue.elevation)};">
+                        ${venue.elevation}m
+                    </span>
+                </li>
+            `;
+        });
+        html += '</ol>';
+        listContent.innerHTML = html;
+    }
+}
+
+/**
+ * Initialize Extreme Latitude Venues Map (Trivia)
+ */
+async function initExtremeLatitudeMap() {
+    const mapContainer = document.getElementById('extreme-latitude-map');
+    if (!mapContainer) {
+        console.warn('Extreme latitude map container not found');
+        return;
+    }
+
+    // Fetch venues at extreme latitudes
+    const data = await fetchData('/extreme-latitude-venues');
+    if (!data || !data.northerly || !data.southerly) return;
+
+    const allVenues = [...data.northerly, ...data.southerly];
+
+    // Update count
+    const countElement = document.getElementById('extreme-venues-count');
+    if (countElement) {
+        countElement.textContent = `${allVenues.length} venues`;
+    }
+
+    // Initialize map with satellite imagery
+    const map = new maplibregl.Map({
+        container: 'extreme-latitude-map',
+        style: {
+            version: 8,
+            glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
+            sources: {
+                'satellite': {
+                    type: 'raster',
+                    tiles: [
+                        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+                    ],
+                    tileSize: 256,
+                    attribution: '© Esri'
+                },
+                'labels': {
+                    type: 'raster',
+                    tiles: [
+                        'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'
+                    ],
+                    tileSize: 256
+                }
+            },
+            layers: [
+                {
+                    id: 'satellite-tiles',
+                    type: 'raster',
+                    source: 'satellite',
+                    minzoom: 0,
+                    maxzoom: 19
+                },
+                {
+                    id: 'labels-layer',
+                    type: 'raster',
+                    source: 'labels',
+                    minzoom: 0,
+                    maxzoom: 19
+                }
+            ]
+        },
+        center: [20, 35],
+        zoom: 1.2
+    });
+
+    // Add standard map controls with custom reset position
+    addStandardMapControls(map, {center: [20, 35], zoom: 1.2});
+
+    map.on('load', () => {
+        // Calculate bounds to fit all venues
+        const bounds = new maplibregl.LngLatBounds();
+        allVenues.forEach(venue => {
+            bounds.extend([venue.longitude, venue.latitude]);
+        });
+        
+        // Fit map to show all venues with padding
+        map.fitBounds(bounds, {
+            padding: {top: 50, bottom: 50, left: 50, right: 50},
+            maxZoom: 15,
+            duration: 0
+        });
+        
+        // Add markers for northerly venues (blue)
+        data.northerly.forEach(venue => {
+            const el = document.createElement('div');
+            el.style.backgroundColor = '#3b82f6';
+            el.style.width = '12px';
+            el.style.height = '12px';
+            el.style.borderRadius = '50%';
+            el.style.border = '2px solid white';
+            el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
+            el.style.cursor = 'pointer';
+
+            new maplibregl.Marker({element: el})
+                .setLngLat([venue.longitude, venue.latitude])
+                .setPopup(
+                    new maplibregl.Popup({offset: 15})
+                        .setHTML(`
+                            <div style="padding: 8px; min-width: 200px;">
+                                <strong>${venue.name}</strong><br>
+                                <span class="text-muted small">${venue.address || venue.suburb || ''}, ${venue.country}</span><br>
+                                <div class="mt-2">
+                                    <span style="color: #3b82f6; font-weight: bold;">
+                                        🧭 ${venue.latitude.toFixed(4)}°N
+                                    </span>
+                                    <span class="text-muted small ms-2">
+                                        🎾 ${venue.courts} court${venue.courts !== 1 && venue.courts !== 'Unknown' ? 's' : ''}
+                                    </span>
+                                </div>
+                            </div>
+                        `)
+                )
+                .addTo(map);
+        });
+
+        // Add markers for southerly venues (red)
+        data.southerly.forEach(venue => {
+            const el = document.createElement('div');
+            el.style.backgroundColor = '#ef4444';
+            el.style.width = '12px';
+            el.style.height = '12px';
+            el.style.borderRadius = '50%';
+            el.style.border = '2px solid white';
+            el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
+            el.style.cursor = 'pointer';
+
+            new maplibregl.Marker({element: el})
+                .setLngLat([venue.longitude, venue.latitude])
+                .setPopup(
+                    new maplibregl.Popup({offset: 15})
+                        .setHTML(`
+                            <div style="padding: 8px; min-width: 200px;">
+                                <strong>${venue.name}</strong><br>
+                                <span class="text-muted small">${venue.address || venue.suburb || ''}, ${venue.country}</span><br>
+                                <div class="mt-2">
+                                    <span style="color: #ef4444; font-weight: bold;">
+                                        🧭 ${Math.abs(venue.latitude).toFixed(4)}°S
+                                    </span>
+                                    <span class="text-muted small ms-2">
+                                        🎾 ${venue.courts} court${venue.courts !== 1 && venue.courts !== 'Unknown' ? 's' : ''}
+                                    </span>
+                                </div>
+                            </div>
+                        `)
+                )
+                .addTo(map);
+        });
+    });
+
+    // Populate northerly list
+    const northerlyListContent = document.getElementById('northerly-list-content');
+    if (northerlyListContent) {
+        let html = '<ol class="list-group list-group-numbered">';
+        data.northerly.forEach(venue => {
+            html += `
+                <li class="list-group-item d-flex justify-content-between align-items-start">
+                    <div class="ms-2 me-auto">
+                        <div class="fw-bold">${venue.name}</div>
+                        <small class="text-muted">${venue.suburb || venue.state || ''}, ${venue.country}</small>
+                    </div>
+                    <span class="badge bg-primary">
+                        ${venue.latitude.toFixed(4)}°N
+                    </span>
+                </li>
+            `;
+        });
+        html += '</ol>';
+        northerlyListContent.innerHTML = html;
+    }
+
+    // Populate southerly list
+    const southerlyListContent = document.getElementById('southerly-list-content');
+    if (southerlyListContent) {
+        let html = '<ol class="list-group list-group-numbered">';
+        data.southerly.forEach(venue => {
+            html += `
+                <li class="list-group-item d-flex justify-content-between align-items-start">
+                    <div class="ms-2 me-auto">
+                        <div class="fw-bold">${venue.name}</div>
+                        <small class="text-muted">${venue.suburb || venue.state || ''}, ${venue.country}</small>
+                    </div>
+                    <span class="badge bg-danger">
+                        ${Math.abs(venue.latitude).toFixed(4)}°S
+                    </span>
+                </li>
+            `;
+        });
+        html += '</ol>';
+        southerlyListContent.innerHTML = html;
+    }
+}
+
+/**
+ * Initialize Hotels & Resorts Map (Trivia)
+ */
+async function initHotelsResortsMap() {
+    const mapContainer = document.getElementById('hotels-resorts-map');
+    if (!mapContainer) {
+        console.warn('Hotels & resorts map container not found');
+        return;
+    }
+
+    // Fetch hotels and resorts
+    const venues = await fetchData('/hotels-and-resorts');
+    if (!venues || venues.length === 0) return;
+
+    // Update count
+    const countElement = document.getElementById('hotels-count');
+    if (countElement) {
+        countElement.textContent = `${venues.length} venues`;
+    }
+
+    // Initialize map with same style as High Altitude Venues (consistency)
+    const map = new maplibregl.Map({
+        container: 'hotels-resorts-map',
+        style: {
+            version: 8,
+            glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
+            sources: {
+                'osm': {
+                    type: 'raster',
+                    tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                    tileSize: 256,
+                    attribution: '© OpenStreetMap contributors'
+                }
+            },
+            layers: [
+                {
+                    id: 'osm-tiles',
+                    type: 'raster',
+                    source: 'osm',
+                    minzoom: 0,
+                    maxzoom: 19
+                }
+            ]
+        },
+        center: [0, 20],
+        zoom: 1.5
+    });
+
+    // Add standard map controls
+    addStandardMapControls(map);
+
+    // Store all markers for filtering
+    let allMarkers = [];
+
+    map.on('load', () => {
+        // Calculate bounds to fit all venues
+        const bounds = new maplibregl.LngLatBounds();
+        venues.forEach(venue => {
+            bounds.extend([venue.longitude, venue.latitude]);
+        });
+        
+        // Fit map to show all venues with padding
+        map.fitBounds(bounds, {
+            padding: {top: 50, bottom: 50, left: 50, right: 50},
+            maxZoom: 15,
+            duration: 0
+        });
+        
+        // Add markers for each hotel/resort
+        venues.forEach(venue => {
+            const el = document.createElement('div');
+            el.style.backgroundColor = '#8b5cf6';
+            el.style.width = '12px';
+            el.style.height = '12px';
+            el.style.borderRadius = '50%';
+            el.style.border = '2px solid white';
+            el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
+            el.style.cursor = 'pointer';
+            el.dataset.continentId = venue.continent_id;
+
+            const marker = new maplibregl.Marker({element: el})
+                .setLngLat([venue.longitude, venue.latitude])
+                .setPopup(
+                    new maplibregl.Popup({offset: 15})
+                        .setHTML(`
+                            <div style="padding: 8px; min-width: 200px;">
+                                <strong>${venue.name}</strong><br>
+                                <span class="text-muted small">${venue.address || venue.suburb || ''}, ${venue.country}</span><br>
+                                <div class="mt-2">
+                                    <span class="badge bg-secondary">${venue.category}</span>
+                                    <span class="text-muted small ms-2">
+                                        🎾 ${venue.courts} court${venue.courts !== 1 && venue.courts !== 'Unknown' ? 's' : ''}
+                                    </span>
+                                </div>
+                            </div>
+                        `)
+                )
+                .addTo(map);
+
+            allMarkers.push({marker, venue, element: el});
+        });
+    });
+
+    // Continent filter functionality
+    const continentFilter = document.getElementById('continent-filter');
+    if (continentFilter) {
+        continentFilter.addEventListener('change', function() {
+            const selectedContinent = this.value;
+            
+            allMarkers.forEach(({marker, venue, element}) => {
+                if (!selectedContinent || venue.continent_id == selectedContinent) {
+                    element.style.display = 'block';
+                } else {
+                    element.style.display = 'none';
+                }
+            });
+
+            // Update list
+            updateHotelsList(selectedContinent ? venues.filter(v => v.continent_id == selectedContinent) : venues);
+        });
+    }
+
+    // Populate initial list
+    updateHotelsList(venues);
+
+    function updateHotelsList(venuesToShow) {
+        const listContent = document.getElementById('hotels-list-content');
+        if (!listContent) return;
+
+        if (venuesToShow.length === 0) {
+            listContent.innerHTML = '<div class="text-center text-muted">No hotels or resorts found for this filter.</div>';
+            return;
+        }
+
+        // Group by continent
+        const grouped = {};
+        venuesToShow.forEach(venue => {
+            if (!grouped[venue.continent_name]) {
+                grouped[venue.continent_name] = [];
+            }
+            grouped[venue.continent_name].push(venue);
+        });
+
+        let html = '';
+        Object.keys(grouped).sort().forEach(continent => {
+            html += `<div class="col-12 mt-3"><h6 class="text-primary">${continent}</h6></div>`;
+            grouped[continent].forEach(venue => {
+                html += `
+                    <div class="col-md-6 mb-2">
+                        <div class="card card-body py-2 px-3">
+                            <div class="fw-bold small">${venue.name}</div>
+                            <div class="text-muted" style="font-size: 0.75rem;">${venue.suburb || venue.state || ''}, ${venue.country}</div>
+                            <div class="mt-1">
+                                <span class="badge bg-light text-dark" style="font-size: 0.7rem;">${venue.category}</span>
+                                <span class="text-muted ms-2" style="font-size: 0.7rem;">🎾 ${venue.courts}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        });
+
+        listContent.innerHTML = `<div class="row">${html}</div>`;
+    }
+}
+
+/**
+ * Initialize Countries Stats Table (Trivia)
+ */
+async function initCountriesStatsTable() {
+    const tableContainer = document.getElementById('countries-stats-container');
+    const loadingIndicator = document.getElementById('countries-stats-loading');
+    
+    if (!tableContainer || !loadingIndicator) {
+        console.warn('Countries stats table container not found');
+        return;
+    }
+
+    // Fetch country statistics
+    let countries = await fetchData('/countries-with-venues-stats');
+    if (!countries || countries.length === 0) {
+        loadingIndicator.innerHTML = '<div class="alert alert-warning">No data available</div>';
+        return;
+    }
+
+    // Hide loading, show table
+    loadingIndicator.classList.add('d-none');
+    tableContainer.classList.remove('d-none');
+
+    const tbody = document.getElementById('countries-stats-tbody');
+    if (!tbody) return;
+
+    // Sorting state
+    let currentSort = { column: null, direction: 'asc' };
+
+    // Function to render table
+    function renderTable(data) {
+        let html = '';
+        data.forEach((country, index) => {
+            html += `
+                <tr>
+                    <td class="text-center text-muted sticky-col">${index + 1}</td>
+                    <td class="sticky-col sticky-col-country"><strong>${country.name}</strong></td>
+                    <td class="text-end">${(country.population / 1000000).toFixed(3)}</td>
+                    <td class="text-end">${(country.area_sq_km / 1000000).toFixed(5)}</td>
+                    <td class="text-end">${country.venues}</td>
+                    <td class="text-end">${country.courts}</td>
+                    <td class="text-end">${country.venues_per_population.toFixed(2)}</td>
+                    <td class="text-end">${country.courts_per_population.toFixed(2)}</td>
+                    <td class="text-end">${country.venues_per_area.toFixed(2)}</td>
+                    <td class="text-end">${country.courts_per_area.toFixed(2)}</td>
+                </tr>
+            `;
+        });
+        tbody.innerHTML = html;
+    }
+
+    // Function to sort data
+    function sortData(column) {
+        // Toggle direction if same column, otherwise default to ascending
+        if (currentSort.column === column) {
+            currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+            currentSort.column = column;
+            currentSort.direction = 'asc';
+        }
+
+        // Sort the data
+        countries.sort((a, b) => {
+            let aVal = a[column];
+            let bVal = b[column];
+
+            // Handle string comparison for country names
+            if (column === 'name') {
+                aVal = aVal.toLowerCase();
+                bVal = bVal.toLowerCase();
+                return currentSort.direction === 'asc' 
+                    ? aVal.localeCompare(bVal)
+                    : bVal.localeCompare(aVal);
+            }
+
+            // Numeric comparison
+            return currentSort.direction === 'asc' 
+                ? aVal - bVal
+                : bVal - aVal;
+        });
+
+        // Update sort indicators
+        document.querySelectorAll('.sortable').forEach(th => {
+            th.classList.remove('sort-asc', 'sort-desc');
+        });
+        const activeHeader = document.querySelector(`.sortable[data-sort="${column}"]`);
+        if (activeHeader) {
+            activeHeader.classList.add(`sort-${currentSort.direction}`);
+        }
+
+        // Re-render table
+        renderTable(countries);
+    }
+
+    // Initial render
+    renderTable(countries);
+
+    // Add click handlers to sortable headers
+    document.querySelectorAll('.sortable').forEach(th => {
+        th.addEventListener('click', function() {
+            const column = this.getAttribute('data-sort');
+            sortData(column);
+        });
+    });
+}
+
+/**
+ * Initialize Unknown Courts Map (Trivia)
+ */
+async function initUnknownCourtsMap() {
+    const mapContainer = document.getElementById('unknown-courts-map');
+    if (!mapContainer) {
+        console.warn('Unknown courts map container not found');
+        return;
+    }
+
+    // Fetch venues with unknown courts
+    const venues = await fetchData('/venues-with-unknown-courts');
+    if (!venues || venues.length === 0) return;
+
+    // Update count
+    const countElement = document.getElementById('unknown-courts-count');
+    if (countElement) {
+        countElement.textContent = `${venues.length} venues`;
+    }
+
+    // Initialize map
+    const map = new maplibregl.Map({
+        container: 'unknown-courts-map',
+        style: {
+            version: 8,
+            glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
+            sources: {
+                'osm': {
+                    type: 'raster',
+                    tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                    tileSize: 256,
+                    attribution: '© OpenStreetMap contributors'
+                }
+            },
+            layers: [
+                {
+                    id: 'osm-tiles',
+                    type: 'raster',
+                    source: 'osm',
+                    minzoom: 0,
+                    maxzoom: 19
+                }
+            ]
+        },
+        center: [0, 20],
+        zoom: 1.5
+    });
+
+    // Add standard map controls
+    addStandardMapControls(map);
+
+    // Store all markers for filtering
+    let allMarkers = [];
+
+    map.on('load', () => {
+        // Calculate bounds to fit all venues
+        const bounds = new maplibregl.LngLatBounds();
+        venues.forEach(venue => {
+            bounds.extend([venue.longitude, venue.latitude]);
+        });
+        
+        // Fit map to show all venues with padding
+        map.fitBounds(bounds, {
+            padding: {top: 50, bottom: 50, left: 50, right: 50},
+            maxZoom: 15,
+            duration: 0
+        });
+        
+        // Add markers for each venue
+        venues.forEach(venue => {
+            const el = document.createElement('div');
+            el.style.backgroundColor = '#6c757d';
+            el.style.width = '10px';
+            el.style.height = '10px';
+            el.style.borderRadius = '50%';
+            el.style.border = '2px solid white';
+            el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
+            el.style.cursor = 'pointer';
+            el.dataset.continentId = venue.continent_id;
+
+            const marker = new maplibregl.Marker({element: el})
+                .setLngLat([venue.longitude, venue.latitude])
+                .setPopup(
+                    new maplibregl.Popup({offset: 15})
+                        .setHTML(`
+                            <div style="padding: 8px; min-width: 200px;">
+                                <strong>${venue.name}</strong><br>
+                                <span class="text-muted small">${venue.address || venue.suburb || ''}, ${venue.country}</span><br>
+                                <div class="mt-2">
+                                    <span class="badge bg-secondary">${venue.category}</span>
+                                    <span class="text-muted small ms-2">
+                                        ❓ Courts: Unknown
+                                    </span>
+                                </div>
+                            </div>
+                        `)
+                )
+                .addTo(map);
+
+            allMarkers.push({marker, venue, element: el});
+        });
+    });
+
+    // Continent filter functionality
+    const continentFilter = document.getElementById('unknown-courts-continent-filter');
+    if (continentFilter) {
+        continentFilter.addEventListener('change', function() {
+            const selectedContinent = this.value;
+            
+            allMarkers.forEach(({marker, venue, element}) => {
+                if (!selectedContinent || venue.continent_id == selectedContinent) {
+                    element.style.display = 'block';
+                } else {
+                    element.style.display = 'none';
+                }
+            });
+
+            // Update list
+            updateUnknownCourtsList(selectedContinent ? venues.filter(v => v.continent_id == selectedContinent) : venues);
+        });
+    }
+
+    // Populate initial list
+    updateUnknownCourtsList(venues);
+
+    function updateUnknownCourtsList(venuesToShow) {
+        const listContent = document.getElementById('unknown-courts-list-content');
+        if (!listContent) return;
+
+        if (venuesToShow.length === 0) {
+            listContent.innerHTML = '<div class="text-center text-muted">No venues found for this filter.</div>';
+            return;
+        }
+
+        // Group by continent
+        const grouped = {};
+        venuesToShow.forEach(venue => {
+            if (!grouped[venue.continent_name]) {
+                grouped[venue.continent_name] = [];
+            }
+            grouped[venue.continent_name].push(venue);
+        });
+
+        let html = '';
+        Object.keys(grouped).sort().forEach(continent => {
+            html += `<div class="col-12 mt-3"><h6 class="text-secondary">${continent}</h6></div>`;
+            grouped[continent].forEach(venue => {
+                html += `
+                    <div class="col-md-6 mb-2">
+                        <div class="card card-body py-2 px-3">
+                            <div class="fw-bold small">${venue.name}</div>
+                            <div class="text-muted" style="font-size: 0.75rem;">${venue.suburb || venue.state || ''}, ${venue.country}</div>
+                            <div class="mt-1">
+                                <span class="badge bg-light text-dark" style="font-size: 0.7rem;">${venue.category}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        });
+
+        listContent.innerHTML = `<div class="row">${html}</div>`;
+    }
+}
+
+/**
+ * Initialize 100% Country Club Table (Trivia)
+ */
+async function initCountryClub100Table() {
+    const tableContainer = document.getElementById('country-club-container');
+    const loadingIndicator = document.getElementById('country-club-loading');
+    
+    if (!tableContainer || !loadingIndicator) {
+        console.warn('Country club table container not found');
+        return;
+    }
+
+    // Fetch country club data
+    let countries = await fetchData('/country-club-100-percent');
+    if (!countries || countries.length === 0) {
+        loadingIndicator.innerHTML = '<div class="alert alert-warning">No data available</div>';
+        return;
+    }
+
+    // Hide loading, show table
+    loadingIndicator.classList.add('d-none');
+    tableContainer.classList.remove('d-none');
+
+    const tbody = document.getElementById('country-club-tbody');
+    if (!tbody) return;
+
+    // Store original data for filtering
+    let allCountries = [...countries];
+    let filteredCountries = [...countries];
+
+    // Sorting state
+    let currentSort = { column: 'percentage', direction: 'desc' };
+
+    // Initial sort by percentage descending
+    sortData('percentage', true);
+
+    // Function to render table
+    function renderTable(data) {
+        let html = '';
+        data.forEach((country, index) => {
+            // Add a data attribute for 100% countries instead of a class
+            const dataAttr = country.percentage === 100 ? 'data-hundred-percent="true"' : '';
+            html += `
+                <tr ${dataAttr}>
+                    <td class="text-center text-muted sticky-col">${index + 1}</td>
+                    <td class="sticky-col sticky-col-country"><strong>${country.name}</strong></td>
+                    <td class="text-end">${country.total_venues}</td>
+                    <td class="text-end">${country.venues_with_courts}</td>
+                    <td class="text-end">${country.total_courts}</td>
+                    <td class="text-end">${country.percentage}%</td>
+                    <td class="text-end">${country.courts_per_venue}</td>
+                </tr>
+            `;
+        });
+        tbody.innerHTML = html;
+        
+        // Update totals
+        updateTotals(data);
+    }
+
+    // Function to update grand summary totals
+    function updateTotals(data) {
+        const totalVenues = data.reduce((sum, c) => sum + c.total_venues, 0);
+        const totalVenuesWithCourts = data.reduce((sum, c) => sum + c.venues_with_courts, 0);
+        const totalCourts = data.reduce((sum, c) => sum + c.total_courts, 0);
+        const overallPercentage = totalVenues > 0 ? ((totalVenuesWithCourts / totalVenues) * 100).toFixed(1) : 0;
+        const avgCourtsPerVenue = totalVenuesWithCourts > 0 ? (totalCourts / totalVenuesWithCourts).toFixed(2) : 0;
+
+        document.getElementById('total-venues').textContent = totalVenues;
+        document.getElementById('total-venues-with-courts').textContent = totalVenuesWithCourts;
+        document.getElementById('total-courts').textContent = totalCourts;
+        document.getElementById('total-percentage').textContent = overallPercentage + '%';
+        document.getElementById('avg-courts-per-venue').textContent = avgCourtsPerVenue;
+    }
+
+    // Function to sort data
+    function sortData(column, initialSort = false) {
+        // Toggle direction if same column, otherwise default to descending for percentage, ascending for others
+        if (!initialSort) {
+            if (currentSort.column === column) {
+                currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.column = column;
+                currentSort.direction = column === 'percentage' ? 'desc' : 'asc';
+            }
+        } else {
+            currentSort.column = column;
+            currentSort.direction = 'desc';
+        }
+
+        // Sort the data
+        filteredCountries.sort((a, b) => {
+            let aVal = a[column];
+            let bVal = b[column];
+
+            // Handle string comparison for country names
+            if (column === 'name') {
+                aVal = aVal.toLowerCase();
+                bVal = bVal.toLowerCase();
+                return currentSort.direction === 'asc' 
+                    ? aVal.localeCompare(bVal)
+                    : bVal.localeCompare(aVal);
+            }
+
+            // Numeric comparison
+            return currentSort.direction === 'asc' 
+                ? aVal - bVal
+                : bVal - aVal;
+        });
+
+        // Update sort indicators
+        document.querySelectorAll('.sortable').forEach(th => {
+            th.classList.remove('sort-asc', 'sort-desc');
+        });
+        const activeHeader = document.querySelector(`.sortable[data-sort="${column}"]`);
+        if (activeHeader) {
+            activeHeader.classList.add(`sort-${currentSort.direction}`);
+        }
+
+        // Re-render table
+        renderTable(filteredCountries);
+    }
+
+    // Initial render
+    renderTable(filteredCountries);
+
+    // Add click handlers to sortable headers
+    document.querySelectorAll('.sortable').forEach(th => {
+        th.addEventListener('click', function() {
+            const column = this.getAttribute('data-sort');
+            sortData(column);
+        });
+    });
+
+    // Continent filter (note: we don't have continent data in the API response yet)
+    // This is a placeholder for future enhancement
+    const continentFilter = document.getElementById('country-club-continent-filter');
+    if (continentFilter) {
+        continentFilter.addEventListener('change', function() {
+            // For now, this filter won't work as we need to add continent data to the API
+            // Placeholder for future implementation
+            console.log('Continent filter selected:', this.value);
+        });
+    }
+}
+
+/**
+ * Initialize Countries Word Cloud (Trivia)
+ */
+    async function initCountriesWordCloud() {
+        const canvas = document.getElementById('countries-wordcloud-canvas');
+        const loadingIndicator = document.getElementById('wordcloud-loading');
+        const container = document.getElementById('wordcloud-container');
+        const tooltip = document.getElementById('wordcloud-tooltip');
+
+        if (!canvas || !loadingIndicator || !container || !tooltip) {
+            console.warn('Word cloud elements not found');
+            return;
+        }
+
+        // Fetch word cloud data
+        let data = await fetchData('/countries-wordcloud');
+        if (!data || data.length === 0) {
+            loadingIndicator.innerHTML = '<div class="alert alert-warning">No data available</div>';
+            return;
+        }
+
+        // Sort by value descending to ensure top countries are prioritized
+        data = data.sort((a, b) => b.value - a.value);
+        
+        // Take as many countries as possible - let's try 100
+        data = data.slice(0, 100);
+        
+        console.log('Word cloud data (top 10):', data.slice(0, 10));
+        console.log('Total countries in word cloud:', data.length);
+
+        // Hide loading, show chart
+        loadingIndicator.classList.add('d-none');
+        container.classList.remove('d-none');
+
+        // Convert data to WordCloud2.js format: [[word, size], ...]
+        // Ensure venue counts are integers - use Math.floor to guarantee whole numbers
+        data = data.map(d => ({ key: d.key, value: Math.floor(Number(d.value)) }));
+        
+        // Create a lookup map for original venue counts BEFORE creating wordCloudData
+        // This ensures we store the original integer values before any potential modifications
+        const venueCountMap = {};
+        data.forEach(d => {
+            venueCountMap[d.key] = d.value;
+        });
+        
+        // Now create the word cloud data array - WordCloud2.js may modify this array
+        const wordCloudData = data.map(d => [d.key, d.value]);
+        
+        
+        // Calculate max value for color scaling (after rounding)
+        const maxValue = Math.max(...data.map(d => d.value));
+        
+        // Define color bands based on actual venue counts
+        // These are meaningful thresholds that make sense for venue counts
+        const colorBands = [
+            { threshold: 1000, color: '#dc3545', label: '1,000+' },
+            { threshold: 500, color: '#fd7e14', label: '500-999' },
+            { threshold: 100, color: '#ffc107', label: '100-499' },
+            { threshold: 50, color: '#28a745', label: '50-99' },
+            { threshold: 10, color: '#20c997', label: '10-49' },
+            { threshold: 0, color: '#0dcaf0', label: '1-9' }
+        ];
+        
+        // Update the legend dynamically
+        const legendContainer = document.querySelector('#countries-wordcloud-legend');
+        if (legendContainer) {
+            legendContainer.innerHTML = colorBands.map(band => 
+                `<span class="badge" style="background-color: ${band.color}; color: ${band.color === '#ffc107' ? '#000' : '#fff'};">${band.label} venues</span>`
+            ).join('');
+        }
+        
+        // Create word cloud using WordCloud2.js with high-resolution canvas
+        WordCloud(canvas, {
+            list: wordCloudData,
+            gridSize: 4, // Smaller grid for better precision
+            weightFactor: function(size) {
+                // Scale sizes appropriately - log scaling for better distribution with many countries
+                return (Math.log(size + 1) / Math.log(maxValue + 1)) * 120;
+            },
+            fontFamily: 'Arial, sans-serif',
+            fontWeight: 'bold',
+            color: function(word, weight, fontSize, distance, theta) {
+                // Color based on actual venue count - use meaningful thresholds
+                const venueCount = venueCountMap[word];
+                
+                // Find the appropriate color band
+                for (let band of colorBands) {
+                    if (venueCount >= band.threshold) {
+                        return band.color;
+                    }
+                }
+                return '#0dcaf0'; // Default to lowest band
+            },
+            rotateRatio: 0, // No rotation for better readability
+            backgroundColor: '#ffffff',
+            minSize: 8, // Smaller minimum to fit more countries
+            drawOutOfBound: false,
+            shrinkToFit: true,
+            hover: function(item, dimension, event) {
+                if (item) {
+                    // Show custom tooltip on hover
+                    canvas.style.cursor = 'pointer';
+                    const country = item[0];
+                    // Use the original venue count from our lookup map instead of item[1]
+                    const venues = venueCountMap[country];
+                    
+                    tooltip.textContent = `${country}: ${venues} venue${venues !== 1 ? 's' : ''}`;
+                    tooltip.style.display = 'block';
+                    tooltip.style.left = (event.offsetX + 10) + 'px';
+                    tooltip.style.top = (event.offsetY + 10) + 'px';
+                } else {
+                    canvas.style.cursor = 'default';
+                    tooltip.style.display = 'none';
+                }
+            },
+            click: function(item, dimension, event) {
+                if (item) {
+                    const country = item[0];
+                    // Use the original venue count from our lookup map
+                    const venues = venueCountMap[country];
+                    console.log(`Clicked: ${country} (${venues} venues)`);
+                }
+            }
+        });
+    }
+
+/**
  * Initialize dashboard - only load components that exist on the page
  */
 document.addEventListener('DOMContentLoaded', async () => {
@@ -1381,6 +2584,38 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     if (document.getElementById('top-venues-by-courts-chart')) {
         initFunctions.push(createTopVenuesByCountsChart(filter));
+    }
+    
+    if (document.getElementById('countries-without-map')) {
+        initFunctions.push(initCountriesWithoutVenuesMap());
+    }
+    
+    if (document.getElementById('highest-venues-map')) {
+        initFunctions.push(initHighestVenuesMap());
+    }
+    
+    if (document.getElementById('extreme-latitude-map')) {
+        initFunctions.push(initExtremeLatitudeMap());
+    }
+    
+    if (document.getElementById('hotels-resorts-map')) {
+        initFunctions.push(initHotelsResortsMap());
+    }
+    
+    if (document.getElementById('countries-stats-table')) {
+        initFunctions.push(initCountriesStatsTable());
+    }
+    
+    if (document.getElementById('unknown-courts-map')) {
+        initFunctions.push(initUnknownCourtsMap());
+    }
+    
+    if (document.getElementById('country-club-table')) {
+        initFunctions.push(initCountryClub100Table());
+    }
+    
+    if (document.getElementById('countries-wordcloud-canvas')) {
+        initFunctions.push(initCountriesWordCloud());
     }
     
     // Load only the components that exist on the page
