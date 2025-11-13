@@ -38,7 +38,7 @@
     @endchartRelevant
     
     {{-- Fluid Grid Layout: All charts flow naturally without fixed rows --}}
-    <div class="row g-4 mb-4">
+    <div class="row g-4">
         @chartRelevant('top-venues')
             <x-charts.top-venues />
         @endchartRelevant

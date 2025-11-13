@@ -1,5 +1,5 @@
 {{-- Website Stats Component --}}
-<div class="col-lg-6">
+<div class="col-lg-6 mb-4">
     <div class="card shadow-sm h-100">
         <div class="card-header bg-white">
                     <h5 class="mb-0" id="website-stats-title">Squash venues with websites on Google Maps</h5>
