@@ -374,4 +374,58 @@ class SquashStatsController extends Controller
 
         return response()->json($data);
     }
+
+    /**
+     * Get loneliest squash courts.
+     */
+    public function loneliestCourts(Request $request): JsonResponse
+    {
+        // No limit needed - we want one venue per country (all countries)
+        $cacheKey = "squash:loneliest_courts:all";
+
+        $data = Cache::remember($cacheKey, 10800, function () {
+            // Use a high limit to get all countries (there are ~200 countries max)
+            return $this->aggregator->loneliestCourts(250);
+        });
+
+        return response()->json($data);
+    }
+
+    /**
+     * Get squash court graveyard (deleted/closed venues).
+     */
+    public function courtGraveyard(Request $request): JsonResponse
+    {
+        $filters = [];
+        
+        if ($request->has('country')) {
+            $filters['country'] = $request->input('country');
+        }
+        
+        if ($request->has('delete_reason_id')) {
+            $filters['delete_reason_id'] = $request->input('delete_reason_id');
+        }
+
+        $cacheKey = "squash:court_graveyard:" . md5(json_encode($filters));
+
+        $data = Cache::remember($cacheKey, 10800, function () use ($filters) {
+            return $this->aggregator->courtGraveyard($filters);
+        });
+
+        return response()->json($data);
+    }
+
+    /**
+     * Get list of venue deletion reasons.
+     */
+    public function deletionReasons(): JsonResponse
+    {
+        $cacheKey = "squash:deletion_reasons";
+
+        $data = Cache::remember($cacheKey, 86400, function () {
+            return $this->aggregator->deletionReasons();
+        });
+
+        return response()->json($data);
+    }
 }

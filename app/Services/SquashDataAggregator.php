@@ -1064,5 +1064,183 @@ class SquashDataAggregator
             ];
         })->toArray();
     }
+
+    /**
+     * Get loneliest squash courts (venues with largest distance to nearest neighbor).
+     *
+     * @param int $limit
+     * @return array
+     */
+    public function loneliestCourts(int $limit = 50): array
+    {
+        // Get the loneliest venue from each country (venue with max distance to nearest neighbor per country)
+        // This ensures we have representation from all countries, not just the globally most isolated venues
+        $venues = DB::connection('squash_remote')
+            ->table('venues as v1')
+            ->join('countries as c1', 'v1.country_id', '=', 'c1.id')
+            ->join('venues as v2', 'v1.nearest_venue_id', '=', 'v2.id')
+            ->join('countries as c2', 'v2.country_id', '=', 'c2.id')
+            ->join(
+                DB::connection('squash_remote')->raw('(
+                    SELECT country_id, MAX(nearest_venue_km) as max_distance
+                    FROM venues
+                    WHERE status = "1"
+                    AND nearest_venue_id IS NOT NULL
+                    AND nearest_venue_km IS NOT NULL
+                    AND latitude IS NOT NULL
+                    AND longitude IS NOT NULL
+                    AND latitude != 0
+                    AND longitude != 0
+                    GROUP BY country_id
+                ) as max_per_country'),
+                function ($join) {
+                    $join->on('v1.country_id', '=', DB::raw('max_per_country.country_id'))
+                        ->on('v1.nearest_venue_km', '=', DB::raw('max_per_country.max_distance'));
+                }
+            )
+            ->where('v1.status', '1')
+            ->where('v2.status', '1')
+            ->whereNotNull('v1.nearest_venue_id')
+            ->whereNotNull('v1.nearest_venue_km')
+            ->whereNotNull('v1.latitude')
+            ->whereNotNull('v1.longitude')
+            ->whereNotNull('v2.latitude')
+            ->whereNotNull('v2.longitude')
+            ->where('v1.latitude', '!=', 0)
+            ->where('v1.longitude', '!=', 0)
+            ->where('v2.latitude', '!=', 0)
+            ->where('v2.longitude', '!=', 0)
+            ->select([
+                'v1.id as venue_id',
+                'v1.name as venue_name',
+                'v1.physical_address as venue_address',
+                'v1.suburb as venue_suburb',
+                'v1.state as venue_state',
+                'v1.latitude as venue_lat',
+                'v1.longitude as venue_lng',
+                'v1.no_of_courts as venue_courts',
+                'c1.name as venue_country',
+                'c1.alpha_2_code as venue_country_code',
+                'v2.id as nearest_id',
+                'v2.name as nearest_name',
+                'v2.physical_address as nearest_address',
+                'v2.suburb as nearest_suburb',
+                'v2.state as nearest_state',
+                'v2.latitude as nearest_lat',
+                'v2.longitude as nearest_lng',
+                'v2.no_of_courts as nearest_courts',
+                'c2.name as nearest_country',
+                'c2.alpha_2_code as nearest_country_code',
+                'v1.nearest_venue_km as distance_km',
+            ])
+            ->orderBy('v1.nearest_venue_km', 'desc')
+            ->limit($limit)
+            ->get();
+
+        return $venues->map(function ($venue) {
+            return [
+                'venue' => [
+                    'id' => $venue->venue_id,
+                    'name' => $venue->venue_name,
+                    'address' => $venue->venue_address,
+                    'suburb' => $venue->venue_suburb,
+                    'state' => $venue->venue_state,
+                    'country' => $venue->venue_country,
+                    'country_code' => $venue->venue_country_code,
+                    'latitude' => (float) $venue->venue_lat,
+                    'longitude' => (float) $venue->venue_lng,
+                    'courts' => $venue->venue_courts ?? 'Unknown',
+                ],
+                'nearest' => [
+                    'id' => $venue->nearest_id,
+                    'name' => $venue->nearest_name,
+                    'address' => $venue->nearest_address,
+                    'suburb' => $venue->nearest_suburb,
+                    'state' => $venue->nearest_state,
+                    'country' => $venue->nearest_country,
+                    'country_code' => $venue->nearest_country_code,
+                    'latitude' => (float) $venue->nearest_lat,
+                    'longitude' => (float) $venue->nearest_lng,
+                    'courts' => $venue->nearest_courts ?? 'Unknown',
+                ],
+                'distance_km' => (float) $venue->distance_km,
+            ];
+        })->toArray();
+    }
+
+    /**
+     * Get squash court graveyard (deleted/closed venues).
+     *
+     * @param array $filters Optional filters: country, delete_reason_id
+     * @return array
+     */
+    public function courtGraveyard(array $filters = []): array
+    {
+        $query = DB::connection('squash_remote')
+            ->table('venues as v')
+            ->leftJoin('venue_delete_reasons as vdr', 'v.delete_reason_id', '=', 'vdr.id')
+            ->join('countries as c', 'v.country_id', '=', 'c.id')
+            ->whereIn('v.status', ['3', '4']) // FlaggedForDeletion or Deleted
+            ->whereNotNull('v.date_deleted');
+
+        // Apply filters
+        if (!empty($filters['country'])) {
+            $query->where('c.alpha_2_code', $filters['country']);
+        }
+
+        if (!empty($filters['delete_reason_id'])) {
+            $query->where('v.delete_reason_id', $filters['delete_reason_id']);
+        }
+
+        $venues = $query->select([
+                'v.id',
+                'v.name',
+                'v.physical_address',
+                'v.suburb',
+                'v.state',
+                'v.no_of_courts',
+                'v.status',
+                'v.reason_for_deletion',
+                'v.date_deleted',
+                'c.name as country_name',
+                'c.alpha_2_code as country_code',
+                'vdr.id as delete_reason_id',
+                'vdr.name as delete_reason',
+            ])
+            ->orderBy('v.date_deleted', 'desc')
+            ->get();
+
+        return $venues->map(function ($venue) {
+            return [
+                'id' => $venue->id,
+                'name' => $venue->name,
+                'address' => $venue->physical_address,
+                'suburb' => $venue->suburb,
+                'state' => $venue->state,
+                'country' => $venue->country_name,
+                'country_code' => $venue->country_code,
+                'courts' => $venue->no_of_courts ?? null,
+                'delete_reason_id' => $venue->delete_reason_id,
+                'delete_reason' => $venue->delete_reason ?? 'Other',
+                'reason_details' => $venue->reason_for_deletion,
+                'date_deleted' => $venue->date_deleted,
+            ];
+        })->toArray();
+    }
+
+    /**
+     * Get list of venue deletion reasons.
+     *
+     * @return array
+     */
+    public function deletionReasons(): array
+    {
+        $reasons = DB::connection('squash_remote')
+            ->table('venue_delete_reasons')
+            ->orderBy('sort_by')
+            ->get(['id', 'name']);
+
+        return $reasons->toArray();
+    }
 }
 

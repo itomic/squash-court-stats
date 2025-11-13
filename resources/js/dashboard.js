@@ -2513,6 +2513,348 @@ async function initCountryClub100Table() {
     }
 
 /**
+ * Initialize Loneliest Squash Courts Map (Trivia)
+ */
+async function initLoneliestCourtsMap() {
+    const mapContainer = document.getElementById('loneliest-courts-map');
+    if (!mapContainer) {
+        console.warn('Loneliest courts map container not found');
+        return;
+    }
+
+    // Fetch loneliest courts data (one venue per country)
+    const data = await fetchData('/loneliest-courts');
+    if (!data || data.length === 0) return;
+
+    // Update count
+    const countElement = document.getElementById('loneliest-venues-count');
+    if (countElement) {
+        countElement.textContent = `${data.length} venues`;
+    }
+
+    // Initialize map
+    const map = new maplibregl.Map({
+        container: 'loneliest-courts-map',
+        style: {
+            version: 8,
+            glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
+            sources: {
+                'osm': {
+                    type: 'raster',
+                    tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                    tileSize: 256,
+                    attribution: '© OpenStreetMap contributors'
+                }
+            },
+            layers: [
+                {
+                    id: 'osm-tiles',
+                    type: 'raster',
+                    source: 'osm',
+                    minzoom: 0,
+                    maxzoom: 19
+                }
+            ]
+        },
+        center: [0, 20],
+        zoom: 1.5
+    });
+
+    // Add standard map controls
+    addStandardMapControls(map);
+
+    map.on('load', () => {
+        // Calculate bounds to fit all venues
+        const bounds = new maplibregl.LngLatBounds();
+        data.forEach(item => {
+            bounds.extend([item.venue.longitude, item.venue.latitude]);
+            bounds.extend([item.nearest.longitude, item.nearest.latitude]);
+        });
+        
+        // Fit map to show all venues with padding
+        map.fitBounds(bounds, {
+            padding: {top: 50, bottom: 50, left: 50, right: 50},
+            maxZoom: 10,
+            duration: 0
+        });
+        
+        // Add lines connecting venues to their nearest neighbor
+        // Filter out lines that cross the international dateline
+        const lineFeatures = data
+            .filter(item => {
+                // Calculate longitude difference
+                const lngDiff = Math.abs(item.venue.longitude - item.nearest.longitude);
+                // Don't draw lines that cross the dateline (difference > 180°)
+                return lngDiff <= 180;
+            })
+            .map(item => ({
+                type: 'Feature',
+                geometry: {
+                    type: 'LineString',
+                    coordinates: [
+                        [item.venue.longitude, item.venue.latitude],
+                        [item.nearest.longitude, item.nearest.latitude]
+                    ]
+                },
+                properties: {
+                    distance: item.distance_km
+                }
+            }));
+
+        map.addSource('connection-lines', {
+            type: 'geojson',
+            data: {
+                type: 'FeatureCollection',
+                features: lineFeatures
+            }
+        });
+
+        map.addLayer({
+            id: 'connection-lines',
+            type: 'line',
+            source: 'connection-lines',
+            paint: {
+                'line-color': '#9ca3af',
+                'line-width': 2,
+                'line-opacity': 0.6
+            }
+        });
+        
+        // Add markers for each venue (loneliest)
+        data.forEach(item => {
+            // Loneliest venue marker (red)
+            const venueEl = document.createElement('div');
+            venueEl.className = 'loneliest-venue-marker';
+            venueEl.style.backgroundColor = '#dc2626';
+            venueEl.style.width = '14px';
+            venueEl.style.height = '14px';
+            venueEl.style.borderRadius = '50%';
+            venueEl.style.border = '2px solid white';
+            venueEl.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
+            venueEl.style.cursor = 'pointer';
+
+            new maplibregl.Marker({element: venueEl})
+                .setLngLat([item.venue.longitude, item.venue.latitude])
+                .setPopup(
+                    new maplibregl.Popup({offset: 15})
+                        .setHTML(`
+                            <div style="padding: 8px; min-width: 250px;">
+                                <strong style="color: #dc2626;">🏆 ${item.venue.name}</strong><br>
+                                <span class="text-muted small">${item.venue.address || item.venue.suburb || ''}, ${item.venue.country}</span><br>
+                                <div class="mt-2">
+                                    <span class="text-muted small">
+                                        🎾 ${item.venue.courts} court${item.venue.courts !== 1 && item.venue.courts !== 'Unknown' ? 's' : ''}
+                                    </span>
+                                </div>
+                                <hr style="margin: 8px 0;">
+                                <div class="small">
+                                    <strong>Nearest venue:</strong><br>
+                                    ${item.nearest.name}<br>
+                                    <span class="text-muted">${item.nearest.country}</span><br>
+                                    <strong style="color: #3b82f6;">📏 ${item.distance_km.toFixed(1)} km away</strong>
+                                </div>
+                            </div>
+                        `)
+                )
+                .addTo(map);
+
+            // Nearest venue marker (blue)
+            const nearestEl = document.createElement('div');
+            nearestEl.className = 'nearest-venue-marker';
+            nearestEl.style.backgroundColor = '#3b82f6';
+            nearestEl.style.width = '10px';
+            nearestEl.style.height = '10px';
+            nearestEl.style.borderRadius = '50%';
+            nearestEl.style.border = '2px solid white';
+            nearestEl.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
+            nearestEl.style.cursor = 'pointer';
+
+            new maplibregl.Marker({element: nearestEl})
+                .setLngLat([item.nearest.longitude, item.nearest.latitude])
+                .setPopup(
+                    new maplibregl.Popup({offset: 15})
+                        .setHTML(`
+                            <div style="padding: 8px; min-width: 200px;">
+                                <strong style="color: #3b82f6;">📍 ${item.nearest.name}</strong><br>
+                                <span class="text-muted small">${item.nearest.address || item.nearest.suburb || ''}, ${item.nearest.country}</span><br>
+                                <div class="mt-2">
+                                    <span class="text-muted small">
+                                        🎾 ${item.nearest.courts} court${item.nearest.courts !== 1 && item.nearest.courts !== 'Unknown' ? 's' : ''}
+                                    </span>
+                                </div>
+                            </div>
+                        `)
+                )
+                .addTo(map);
+        });
+    });
+
+    // Populate top 10 list
+    const listContent = document.getElementById('loneliest-venues-list-content');
+    if (listContent) {
+        const top10 = data.slice(0, 10);
+        let html = '<ol class="list-group list-group-numbered">';
+        top10.forEach(item => {
+            html += `
+                <li class="list-group-item">
+                    <div class="d-flex w-100 justify-content-between align-items-start">
+                        <div class="me-auto">
+                            <div class="fw-bold">${item.venue.name}</div>
+                            <small class="text-muted">${item.venue.suburb || item.venue.state || ''}, ${item.venue.country}</small>
+                            <div class="small mt-1">
+                                <span class="text-muted">Nearest: ${item.nearest.name}, ${item.nearest.country}</span>
+                            </div>
+                        </div>
+                        <span class="badge bg-danger ms-2">
+                            ${item.distance_km.toFixed(1)} km
+                        </span>
+                    </div>
+                </li>
+            `;
+        });
+        html += '</ol>';
+        listContent.innerHTML = html;
+    }
+}
+
+/**
+ * Initialize Court Graveyard Table (Trivia)
+ */
+async function initCourtGraveyard() {
+    const tableBody = document.getElementById('graveyard-table-body');
+    const countryFilter = document.getElementById('graveyard-country-filter');
+    const reasonFilter = document.getElementById('graveyard-reason-filter');
+    
+    if (!tableBody || !countryFilter || !reasonFilter) {
+        return;
+    }
+    
+    let allData = [];
+    let deletionReasons = [];
+    let filteredData = [];
+    
+    // Fetch deletion reasons
+    try {
+        deletionReasons = await fetchData('/deletion-reasons');
+        
+        // Populate reason filter
+        reasonFilter.innerHTML = '<option value="">All Reasons</option>';
+        deletionReasons.forEach(reason => {
+            const option = document.createElement('option');
+            option.value = reason.id;
+            option.textContent = reason.name;
+            reasonFilter.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading deletion reasons:', error);
+    }
+    
+    // Fetch graveyard data
+    try {
+        allData = await fetchData('/court-graveyard');
+        filteredData = allData;
+        
+        // Extract unique countries and populate country filter
+        const countries = [...new Set(allData.map(v => v.country_code))].sort();
+        countryFilter.innerHTML = '<option value="">All Countries</option>';
+        countries.forEach(code => {
+            const venue = allData.find(v => v.country_code === code);
+            const option = document.createElement('option');
+            option.value = code;
+            option.textContent = venue.country;
+            countryFilter.appendChild(option);
+        });
+        
+        // Render initial table
+        renderGraveyardTable(filteredData);
+        updateGraveyardStats(allData, filteredData);
+        
+    } catch (error) {
+        console.error('Error loading graveyard data:', error);
+        tableBody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Error loading data</td></tr>';
+    }
+    
+    // Filter handlers
+    const applyFilters = () => {
+        const selectedCountry = countryFilter.value;
+        const selectedReason = reasonFilter.value;
+        
+        filteredData = allData.filter(venue => {
+            const matchesCountry = !selectedCountry || venue.country_code === selectedCountry;
+            const matchesReason = !selectedReason || venue.delete_reason_id == selectedReason;
+            return matchesCountry && matchesReason;
+        });
+        
+        renderGraveyardTable(filteredData);
+        updateGraveyardStats(allData, filteredData);
+    };
+    
+    countryFilter.addEventListener('change', applyFilters);
+    reasonFilter.addEventListener('change', applyFilters);
+}
+
+/**
+ * Render graveyard table
+ */
+function renderGraveyardTable(data) {
+    const tableBody = document.getElementById('graveyard-table-body');
+    
+    if (data.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No venues found</td></tr>';
+        return;
+    }
+    
+    let html = '';
+    data.forEach(venue => {
+        const address = [venue.address, venue.suburb, venue.state].filter(Boolean).join(', ');
+        const courts = venue.courts ? venue.courts : '?';
+        const date = new Date(venue.date_deleted).toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'short', 
+            day: 'numeric' 
+        });
+        
+        html += `
+            <tr>
+                <td>
+                    <strong>${venue.name}</strong>
+                    ${venue.reason_details ? `<br><small class="text-muted">${venue.reason_details}</small>` : ''}
+                </td>
+                <td><small>${address || '-'}</small></td>
+                <td>
+                    <span class="badge bg-secondary">${venue.country}</span>
+                </td>
+                <td class="text-center">${courts}</td>
+                <td><small>${venue.delete_reason}</small></td>
+                <td style="white-space: nowrap;"><small>${date}</small></td>
+            </tr>
+        `;
+    });
+    
+    tableBody.innerHTML = html;
+}
+
+/**
+ * Update graveyard statistics
+ */
+function updateGraveyardStats(allData, filteredData) {
+    // Total venues
+    document.getElementById('graveyard-total-venues').textContent = allData.length;
+    
+    // Total countries
+    const uniqueCountries = new Set(allData.map(v => v.country_code));
+    document.getElementById('graveyard-total-countries').textContent = uniqueCountries.size;
+    
+    // Total courts lost (sum of all courts, treating null as 0)
+    const totalCourts = allData.reduce((sum, v) => sum + (v.courts || 0), 0);
+    document.getElementById('graveyard-total-courts').textContent = totalCourts;
+    
+    // Filtered count
+    document.getElementById('graveyard-filtered-count').textContent = filteredData.length;
+    document.getElementById('graveyard-showing-count').textContent = filteredData.length;
+}
+
+/**
  * Initialize dashboard - only load components that exist on the page
  */
 document.addEventListener('DOMContentLoaded', async () => {
@@ -2616,6 +2958,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     if (document.getElementById('countries-wordcloud-canvas')) {
         initFunctions.push(initCountriesWordCloud());
+    }
+    
+    if (document.getElementById('loneliest-courts-map')) {
+        initFunctions.push(initLoneliestCourtsMap());
+    }
+    
+    if (document.getElementById('graveyard-table-body')) {
+        initFunctions.push(initCourtGraveyard());
     }
     
     // Load only the components that exist on the page

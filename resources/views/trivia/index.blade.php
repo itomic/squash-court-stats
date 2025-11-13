@@ -35,6 +35,12 @@
                     <a href="{{ route('trivia.countries-wordcloud') }}" class="list-group-item list-group-item-action {{ (isset($activeMap) && $activeMap === 'countries-wordcloud') ? 'active' : '' }}" data-trivia-link data-map-id="countries-wordcloud">
                         <i class="fas fa-cloud me-2"></i>Countries Word Cloud
                     </a>
+                    <a href="{{ route('trivia.loneliest-courts') }}" class="list-group-item list-group-item-action {{ (isset($activeMap) && $activeMap === 'loneliest-courts') ? 'active' : '' }}" data-trivia-link data-map-id="loneliest-courts">
+                        <i class="fas fa-map-marker-alt me-2"></i>Loneliest Squash Courts
+                    </a>
+                    <a href="{{ route('trivia.court-graveyard') }}" class="list-group-item list-group-item-action {{ (isset($activeMap) && $activeMap === 'court-graveyard') ? 'active' : '' }}" data-trivia-link data-map-id="court-graveyard">
+                        <i class="fas fa-skull-crossbones me-2"></i>Squash Court Graveyard
+                    </a>
                 </div>
                 <div class="card-footer text-muted small">
                     <i class="fas fa-info-circle me-1"></i>More trivia maps coming soon!
@@ -82,6 +88,16 @@
             {{-- Countries Word Cloud --}}
             <div id="countries-wordcloud" class="trivia-section {{ (!isset($activeMap) || $activeMap !== 'countries-wordcloud') ? 'd-none' : '' }}">
                 <x-trivia.countries-wordcloud />
+            </div>
+            
+            {{-- Loneliest Squash Courts --}}
+            <div id="loneliest-courts" class="trivia-section {{ (!isset($activeMap) || $activeMap !== 'loneliest-courts') ? 'd-none' : '' }}">
+                <x-trivia.loneliest-courts />
+            </div>
+            
+            {{-- Squash Court Graveyard --}}
+            <div id="court-graveyard" class="trivia-section {{ (!isset($activeMap) || $activeMap !== 'court-graveyard') ? 'd-none' : '' }}">
+                <x-trivia.court-graveyard />
             </div>
             
             {{-- Placeholder for future trivia maps --}}
