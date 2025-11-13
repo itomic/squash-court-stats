@@ -1064,5 +1064,89 @@ class SquashDataAggregator
             ];
         })->toArray();
     }
+
+    /**
+     * Get loneliest squash courts (venues with largest distance to nearest neighbor).
+     *
+     * @param int $limit
+     * @return array
+     */
+    public function loneliestCourts(int $limit = 50): array
+    {
+        // Get venues with their nearest neighbor data, ordered by distance
+        $venues = DB::connection('squash_remote')
+            ->table('venues as v1')
+            ->join('countries as c1', 'v1.country_id', '=', 'c1.id')
+            ->join('venues as v2', 'v1.nearest_venue_id', '=', 'v2.id')
+            ->join('countries as c2', 'v2.country_id', '=', 'c2.id')
+            ->where('v1.status', '1')
+            ->where('v2.status', '1')
+            ->whereNotNull('v1.nearest_venue_id')
+            ->whereNotNull('v1.nearest_venue_km')
+            ->whereNotNull('v1.latitude')
+            ->whereNotNull('v1.longitude')
+            ->whereNotNull('v2.latitude')
+            ->whereNotNull('v2.longitude')
+            ->where('v1.latitude', '!=', 0)
+            ->where('v1.longitude', '!=', 0)
+            ->where('v2.latitude', '!=', 0)
+            ->where('v2.longitude', '!=', 0)
+            ->select([
+                'v1.id as venue_id',
+                'v1.name as venue_name',
+                'v1.physical_address as venue_address',
+                'v1.suburb as venue_suburb',
+                'v1.state as venue_state',
+                'v1.latitude as venue_lat',
+                'v1.longitude as venue_lng',
+                'v1.no_of_courts as venue_courts',
+                'c1.name as venue_country',
+                'c1.alpha_2_code as venue_country_code',
+                'v2.id as nearest_id',
+                'v2.name as nearest_name',
+                'v2.physical_address as nearest_address',
+                'v2.suburb as nearest_suburb',
+                'v2.state as nearest_state',
+                'v2.latitude as nearest_lat',
+                'v2.longitude as nearest_lng',
+                'v2.no_of_courts as nearest_courts',
+                'c2.name as nearest_country',
+                'c2.alpha_2_code as nearest_country_code',
+                'v1.nearest_venue_km as distance_km',
+            ])
+            ->orderBy('v1.nearest_venue_km', 'desc')
+            ->limit($limit)
+            ->get();
+
+        return $venues->map(function ($venue) {
+            return [
+                'venue' => [
+                    'id' => $venue->venue_id,
+                    'name' => $venue->venue_name,
+                    'address' => $venue->venue_address,
+                    'suburb' => $venue->venue_suburb,
+                    'state' => $venue->venue_state,
+                    'country' => $venue->venue_country,
+                    'country_code' => $venue->venue_country_code,
+                    'latitude' => (float) $venue->venue_lat,
+                    'longitude' => (float) $venue->venue_lng,
+                    'courts' => $venue->venue_courts ?? 'Unknown',
+                ],
+                'nearest' => [
+                    'id' => $venue->nearest_id,
+                    'name' => $venue->nearest_name,
+                    'address' => $venue->nearest_address,
+                    'suburb' => $venue->nearest_suburb,
+                    'state' => $venue->nearest_state,
+                    'country' => $venue->nearest_country,
+                    'country_code' => $venue->nearest_country_code,
+                    'latitude' => (float) $venue->nearest_lat,
+                    'longitude' => (float) $venue->nearest_lng,
+                    'courts' => $venue->nearest_courts ?? 'Unknown',
+                ],
+                'distance_km' => (float) $venue->distance_km,
+            ];
+        })->toArray();
+    }
 }
 

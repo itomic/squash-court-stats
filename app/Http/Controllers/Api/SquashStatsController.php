@@ -374,4 +374,30 @@ class SquashStatsController extends Controller
 
         return response()->json($data);
     }
+
+    /**
+     * Get loneliest squash courts.
+     */
+    public function loneliestCourts(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'limit' => 'integer|min:1|max:100',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => 'Validation failed',
+                'messages' => $validator->errors(),
+            ], 422);
+        }
+
+        $limit = $request->input('limit', 50);
+        $cacheKey = "squash:loneliest_courts:{$limit}";
+
+        $data = Cache::remember($cacheKey, 10800, function () use ($limit) {
+            return $this->aggregator->loneliestCourts($limit);
+        });
+
+        return response()->json($data);
+    }
 }

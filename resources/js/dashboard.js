@@ -2513,6 +2513,203 @@ async function initCountryClub100Table() {
     }
 
 /**
+ * Initialize Loneliest Squash Courts Map (Trivia)
+ */
+async function initLoneliestCourtsMap() {
+    const mapContainer = document.getElementById('loneliest-courts-map');
+    if (!mapContainer) {
+        console.warn('Loneliest courts map container not found');
+        return;
+    }
+
+    // Fetch loneliest courts data
+    const data = await fetchData('/loneliest-courts?limit=50');
+    if (!data || data.length === 0) return;
+
+    // Update count
+    const countElement = document.getElementById('loneliest-venues-count');
+    if (countElement) {
+        countElement.textContent = `${data.length} venues`;
+    }
+
+    // Initialize map
+    const map = new maplibregl.Map({
+        container: 'loneliest-courts-map',
+        style: {
+            version: 8,
+            glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
+            sources: {
+                'osm': {
+                    type: 'raster',
+                    tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                    tileSize: 256,
+                    attribution: '© OpenStreetMap contributors'
+                }
+            },
+            layers: [
+                {
+                    id: 'osm-tiles',
+                    type: 'raster',
+                    source: 'osm',
+                    minzoom: 0,
+                    maxzoom: 19
+                }
+            ]
+        },
+        center: [0, 20],
+        zoom: 1.5
+    });
+
+    // Add standard map controls
+    addStandardMapControls(map);
+
+    map.on('load', () => {
+        // Calculate bounds to fit all venues
+        const bounds = new maplibregl.LngLatBounds();
+        data.forEach(item => {
+            bounds.extend([item.venue.longitude, item.venue.latitude]);
+            bounds.extend([item.nearest.longitude, item.nearest.latitude]);
+        });
+        
+        // Fit map to show all venues with padding
+        map.fitBounds(bounds, {
+            padding: {top: 50, bottom: 50, left: 50, right: 50},
+            maxZoom: 10,
+            duration: 0
+        });
+        
+        // Add lines connecting venues to their nearest neighbor
+        const lineFeatures = data.map(item => ({
+            type: 'Feature',
+            geometry: {
+                type: 'LineString',
+                coordinates: [
+                    [item.venue.longitude, item.venue.latitude],
+                    [item.nearest.longitude, item.nearest.latitude]
+                ]
+            },
+            properties: {
+                distance: item.distance_km
+            }
+        }));
+
+        map.addSource('connection-lines', {
+            type: 'geojson',
+            data: {
+                type: 'FeatureCollection',
+                features: lineFeatures
+            }
+        });
+
+        map.addLayer({
+            id: 'connection-lines',
+            type: 'line',
+            source: 'connection-lines',
+            paint: {
+                'line-color': '#9ca3af',
+                'line-width': 2,
+                'line-opacity': 0.6
+            }
+        });
+        
+        // Add markers for each venue (loneliest)
+        data.forEach(item => {
+            // Loneliest venue marker (red)
+            const venueEl = document.createElement('div');
+            venueEl.className = 'loneliest-venue-marker';
+            venueEl.style.backgroundColor = '#dc2626';
+            venueEl.style.width = '14px';
+            venueEl.style.height = '14px';
+            venueEl.style.borderRadius = '50%';
+            venueEl.style.border = '2px solid white';
+            venueEl.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
+            venueEl.style.cursor = 'pointer';
+
+            new maplibregl.Marker({element: venueEl})
+                .setLngLat([item.venue.longitude, item.venue.latitude])
+                .setPopup(
+                    new maplibregl.Popup({offset: 15})
+                        .setHTML(`
+                            <div style="padding: 8px; min-width: 250px;">
+                                <strong style="color: #dc2626;">🏆 ${item.venue.name}</strong><br>
+                                <span class="text-muted small">${item.venue.address || item.venue.suburb || ''}, ${item.venue.country}</span><br>
+                                <div class="mt-2">
+                                    <span class="text-muted small">
+                                        🎾 ${item.venue.courts} court${item.venue.courts !== 1 && item.venue.courts !== 'Unknown' ? 's' : ''}
+                                    </span>
+                                </div>
+                                <hr style="margin: 8px 0;">
+                                <div class="small">
+                                    <strong>Nearest venue:</strong><br>
+                                    ${item.nearest.name}<br>
+                                    <span class="text-muted">${item.nearest.country}</span><br>
+                                    <strong style="color: #3b82f6;">📏 ${item.distance_km.toFixed(1)} km away</strong>
+                                </div>
+                            </div>
+                        `)
+                )
+                .addTo(map);
+
+            // Nearest venue marker (blue)
+            const nearestEl = document.createElement('div');
+            nearestEl.className = 'nearest-venue-marker';
+            nearestEl.style.backgroundColor = '#3b82f6';
+            nearestEl.style.width = '10px';
+            nearestEl.style.height = '10px';
+            nearestEl.style.borderRadius = '50%';
+            nearestEl.style.border = '2px solid white';
+            nearestEl.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
+            nearestEl.style.cursor = 'pointer';
+
+            new maplibregl.Marker({element: nearestEl})
+                .setLngLat([item.nearest.longitude, item.nearest.latitude])
+                .setPopup(
+                    new maplibregl.Popup({offset: 15})
+                        .setHTML(`
+                            <div style="padding: 8px; min-width: 200px;">
+                                <strong style="color: #3b82f6;">📍 ${item.nearest.name}</strong><br>
+                                <span class="text-muted small">${item.nearest.address || item.nearest.suburb || ''}, ${item.nearest.country}</span><br>
+                                <div class="mt-2">
+                                    <span class="text-muted small">
+                                        🎾 ${item.nearest.courts} court${item.nearest.courts !== 1 && item.nearest.courts !== 'Unknown' ? 's' : ''}
+                                    </span>
+                                </div>
+                            </div>
+                        `)
+                )
+                .addTo(map);
+        });
+    });
+
+    // Populate top 10 list
+    const listContent = document.getElementById('loneliest-venues-list-content');
+    if (listContent) {
+        const top10 = data.slice(0, 10);
+        let html = '<ol class="list-group list-group-numbered">';
+        top10.forEach(item => {
+            html += `
+                <li class="list-group-item">
+                    <div class="d-flex w-100 justify-content-between align-items-start">
+                        <div class="me-auto">
+                            <div class="fw-bold">${item.venue.name}</div>
+                            <small class="text-muted">${item.venue.suburb || item.venue.state || ''}, ${item.venue.country}</small>
+                            <div class="small mt-1">
+                                <span class="text-muted">Nearest: ${item.nearest.name}, ${item.nearest.country}</span>
+                            </div>
+                        </div>
+                        <span class="badge bg-danger ms-2">
+                            ${item.distance_km.toFixed(1)} km
+                        </span>
+                    </div>
+                </li>
+            `;
+        });
+        html += '</ol>';
+        listContent.innerHTML = html;
+    }
+}
+
+/**
  * Initialize dashboard - only load components that exist on the page
  */
 document.addEventListener('DOMContentLoaded', async () => {
@@ -2616,6 +2813,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     if (document.getElementById('countries-wordcloud-canvas')) {
         initFunctions.push(initCountriesWordCloud());
+    }
+    
+    if (document.getElementById('loneliest-courts-map')) {
+        initFunctions.push(initLoneliestCourtsMap());
     }
     
     // Load only the components that exist on the page

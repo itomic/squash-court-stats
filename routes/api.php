@@ -43,6 +43,7 @@ Route::prefix('squash')->middleware("throttle:{$rateLimit}")->group(function () 
     Route::get('/venues-with-unknown-courts', [SquashStatsController::class, 'venuesWithUnknownCourts']);
     Route::get('/country-club-100-percent', [SquashStatsController::class, 'countryClub100Percent']);
     Route::get('/countries-wordcloud', [SquashStatsController::class, 'countriesByVenuesWordCloud']);
+    Route::get('/loneliest-courts', [SquashStatsController::class, 'loneliestCourts']);
     
     // Geographic search endpoints
     Route::get('/search-areas', [GeographicSearchController::class, 'search']);
