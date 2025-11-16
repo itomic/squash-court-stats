@@ -155,6 +155,9 @@ class CourtCountSearcher
             $query .= " {$venueAddress}";
         }
         
+        // Exclude our own directory to avoid circular references
+        $query .= " -site:squash.players.app";
+        
         return $query;
     }
 
@@ -204,11 +207,16 @@ class CourtCountSearcher
 
         if (isset($data['items'])) {
             foreach ($data['items'] as $item) {
+                $url = $item['link'] ?? '';
+                // Filter out our own directory
+                if (str_contains(strtolower($url), 'squash.players.app')) {
+                    continue;
+                }
                 $results[] = [
                     'title' => $item['title'] ?? '',
                     'snippet' => $item['snippet'] ?? '',
-                    'url' => $item['link'] ?? '',
-                    'source_type' => $this->determineSourceType($item['link'] ?? '', $venueWebsite),
+                    'url' => $url,
+                    'source_type' => $this->determineSourceType($url, $venueWebsite),
                 ];
             }
         }
@@ -252,11 +260,16 @@ class CourtCountSearcher
 
         if (isset($data['organic_results'])) {
             foreach ($data['organic_results'] as $item) {
+                $url = $item['link'] ?? '';
+                // Filter out our own directory
+                if (str_contains(strtolower($url), 'squash.players.app')) {
+                    continue;
+                }
                 $results[] = [
                     'title' => $item['title'] ?? '',
                     'snippet' => $item['snippet'] ?? '',
-                    'url' => $item['link'] ?? '',
-                    'source_type' => $this->determineSourceType($item['link'] ?? '', $venueWebsite),
+                    'url' => $url,
+                    'source_type' => $this->determineSourceType($url, $venueWebsite),
                 ];
             }
         }
@@ -302,11 +315,16 @@ class CourtCountSearcher
 
         if (isset($data['results'])) {
             foreach ($data['results'] as $item) {
+                $url = $item['url'] ?? '';
+                // Filter out our own directory
+                if (str_contains(strtolower($url), 'squash.players.app')) {
+                    continue;
+                }
                 $results[] = [
                     'title' => $item['title'] ?? '',
                     'snippet' => $item['content'] ?? '',
-                    'url' => $item['url'] ?? '',
-                    'source_type' => $this->determineSourceType($item['url'] ?? '', $venueWebsite),
+                    'url' => $url,
+                    'source_type' => $this->determineSourceType($url, $venueWebsite),
                 ];
             }
         }

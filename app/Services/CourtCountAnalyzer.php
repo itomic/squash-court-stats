@@ -10,6 +10,14 @@ class CourtCountAnalyzer
     protected string $apiKey;
     protected string $baseUrl = 'https://api.openai.com/v1';
     protected string $model = 'gpt-4o-mini'; // Model with web search support
+    
+    /**
+     * Check if a URL is a Facebook URL.
+     */
+    protected function isFacebookUrl(string $url): bool
+    {
+        return str_contains(strtolower($url), 'facebook.com');
+    }
     protected bool $useWebSearch = true; // Use OpenAI's native web search via Responses API
 
     public function __construct()
@@ -32,18 +40,97 @@ class CourtCountAnalyzer
     public function analyzeCourtCount(string $venueName, ?string $venueAddress = null, ?string $venueWebsite = null): array
     {
         try {
-            // Build query for OpenAI web search
+            // Check if website is a Facebook page
+            $isFacebookPage = false;
+            $facebookPageInfo = null;
+            
+            if ($venueWebsite && $this->isFacebookUrl($venueWebsite)) {
+                $isFacebookPage = true;
+                // Try to get Facebook page info using Graph API
+                $facebookService = app(\App\Services\FacebookPageService::class);
+                $pageIdentifier = $facebookService->extractPageIdentifier($venueWebsite);
+                
+                if ($pageIdentifier) {
+                    $fbResult = $facebookService->getPublicPageInfo($pageIdentifier);
+                    if ($fbResult['success']) {
+                        $facebookPageInfo = $fbResult['data'];
+                        Log::info('Facebook page info retrieved for court count search', [
+                            'venue_name' => $venueName,
+                            'page_name' => $facebookPageInfo['name'] ?? null,
+                            'page_about' => substr($facebookPageInfo['about'] ?? '', 0, 200),
+                        ]);
+                    }
+                }
+            }
+            
+            // Build comprehensive query for OpenAI web search
             $query = "How many squash courts does {$venueName}";
             if ($venueAddress) {
                 $query .= " located at {$venueAddress}";
             }
             $query .= " have?";
             
-            if ($venueWebsite) {
-                $query .= " Check their website: {$venueWebsite}";
+            // Explicitly mention checking multiple sources
+            $query .= "\n\nIMPORTANT: Search thoroughly across multiple sources:";
+            
+            // Step 1: Find and verify the official website
+            if ($venueWebsite && !$isFacebookPage) {
+                $query .= "\n1. FIRST: Verify if this is the correct official website: {$venueWebsite}";
+                $query .= "\n   - Check if this website has detailed facilities information (squash courts, sports facilities)";
+                $query .= "\n   - IMPORTANT: Some venues have multiple related websites (e.g., estate/development site vs actual club site)";
+                $query .= "\n   - If this website is about a residential estate/development and doesn't have facilities details, it's likely the WRONG website";
+                $query .= "\n   - If this website doesn't have facilities information, search for the ACTUAL club/venue website";
+                $query .= "\n   - Search for '{$venueName} official website' or '{$venueName} facilities' or '{$venueName} club website'";
+                $query .= "\n   - Look for the venue's own domain matching the venue name (e.g., for 'Victoria Country Club', look for victoria.co.za, not vcce.co.za which might be the estate)";
+                $query .= "\n   - The CLUB website (not estate/development site) will have the sports facilities information";
+            } else {
+                $query .= "\n1. FIRST: Find the official CLUB/VENUE website (not estate/development site) by searching for:";
+                $query .= "\n   - '{$venueName} official website'";
+                $query .= "\n   - '{$venueName} facilities'";
+                $query .= "\n   - '{$venueName} club website' (if it's a country club)";
+                $query .= "\n   - Look for the venue's own domain matching the venue name (e.g., .co.za, .com, .org)";
+                $query .= "\n   - Verify it's the correct venue by checking the address matches";
+                $query .= "\n   - IMPORTANT: Distinguish between estate/development websites and actual club/venue websites";
+                $query .= "\n   - The CLUB website will have detailed sports facilities information";
             }
             
-            $query .= " Look for explicit numbers like '3 courts', 'three glass-back courts', etc. Convert written numbers to digits (three=3, two=2, etc.). If 'squash court' (singular), infer 1 court. If 'squash courts' (plural) without a number, infer 2 courts.";
+            $query .= "\n2. Check the official website's FACILITIES page specifically:";
+            $query .= "\n   - Look for URLs like: /facilities, /sports, /squash, /amenities, /about/facilities";
+            $query .= "\n   - These pages often contain detailed information about squash courts";
+            $query .= "\n   - Example: If the website is victoria.co.za, check victoria.co.za/facilities or mail.victoria.co.za/facilities.htm";
+            
+            if ($venueWebsite) {
+                if ($isFacebookPage) {
+                    $query .= "\n3. Check their Facebook page: {$venueWebsite}";
+                    if ($facebookPageInfo) {
+                        $query .= "\n   - Page name: " . ($facebookPageInfo['name'] ?? 'N/A');
+                        if (!empty($facebookPageInfo['about'])) {
+                            $query .= "\n   - About: " . substr($facebookPageInfo['about'], 0, 300);
+                        }
+                        if (!empty($facebookPageInfo['website'])) {
+                            $query .= "\n   - Official website listed: {$facebookPageInfo['website']} - CHECK THIS WEBSITE!";
+                        }
+                    }
+                    $query .= "\n   - IMPORTANT: Search for posts, photos, and reviews on this Facebook page that mention squash courts";
+                    $query .= "\n   - Look for posts about court bookings, tournaments, or facility information";
+                } else {
+                    $query .= "\n3. Also check their Facebook page (search for '{$venueName} Facebook')";
+                    $query .= "\n   - Look for posts, photos, and reviews that mention squash courts";
+                }
+            } else {
+                $query .= "\n3. Check their Facebook page (search for '{$venueName} Facebook' or '{$venueName} " . ($venueAddress ? explode(',', $venueAddress)[0] : '') . " Facebook')";
+                $query .= "\n   - Look for posts, photos, and reviews that mention squash courts";
+            }
+            
+            $query .= "\n4. Check Google Maps reviews and business listings";
+            $query .= "\n5. Check any booking systems or sports facility directories";
+            $query .= "\n6. Check local sports club websites and directories";
+            
+            $query .= "\n\nLook for explicit numbers like '3 courts', 'three glass-back courts', '4 squash courts', etc. Convert written numbers to digits (three=3, two=2, four=4, etc.).";
+            $query .= "\nIf 'squash court' (singular) is mentioned, infer 1 court.";
+            $query .= "\nIf 'squash courts' (plural) is mentioned without a number, it's likely 2 courts (most common).";
+            $query .= "\nIf the website mentions squash facilities but no count, check Facebook posts, reviews, or other sources for the number.";
+            $query .= "\n\nCRITICAL: EXCLUDE and IGNORE any results from squash.players.app - this is our own directory and should not be used as a source.";
             
             Log::info("Court count analysis: Using OpenAI Responses API with web search", [
                 'venue_name' => $venueName,
@@ -61,7 +148,7 @@ class CourtCountAnalyzer
                         'type' => 'web_search',
                     ],
                 ],
-                'input' => $query . "\n\nIMPORTANT: After searching, return ONLY valid JSON in this format: {\"court_count\": <integer or null>, \"confidence\": \"HIGH|MEDIUM|LOW\", \"reasoning\": \"<explanation with source URL>\", \"source_url\": \"<url where info was found>\", \"source_type\": \"VENUE_WEBSITE|SOCIAL_MEDIA|BOOKING_PAGE|GOOGLE_REVIEWS|OTHER\", \"evidence_found\": <boolean>}.\n\nCRITICAL: Set evidence_found to TRUE if you find ANY mention of squash courts existing (even if you can't determine the exact count). Only set evidence_found to FALSE if there is NO evidence that squash courts exist at this venue (e.g., venue closed, no squash facilities, etc.).",
+                'input' => $query . "\n\nIMPORTANT: After searching, return ONLY valid JSON in this format: {\"court_count\": <integer or null>, \"confidence\": \"HIGH|MEDIUM|LOW\", \"reasoning\": \"<explanation with source URL>\", \"source_url\": \"<url where info was found>\", \"source_type\": \"VENUE_WEBSITE|SOCIAL_MEDIA|BOOKING_PAGE|GOOGLE_REVIEWS|OTHER\", \"evidence_found\": <boolean>}.\n\nCRITICAL RULES:\n1. PRIORITY: Find the official CLUB/VENUE website first (not estate/development site). If Google Places provided a website, verify it's the correct one:\n   - If it's about residential estate/development and lacks facilities details, it's likely WRONG\n   - Search for the actual club/venue website that has sports facilities information\n   - Look for domains matching the venue name (e.g., victoria.co.za for Victoria Country Club, not vcce.co.za)\n2. ALWAYS check the facilities page (/facilities, /sports, /squash, /amenities) - this is where court counts are most commonly listed.\n3. Set evidence_found to TRUE if you find ANY mention of squash courts existing (even if you can't determine the exact count). This includes:\n   - Website mentions squash courts/facilities\n   - Facilities page mentions squash\n   - Facebook page mentions squash\n   - Google reviews mention squash\n   - Any source confirms squash facilities exist\n4. Only set evidence_found to FALSE if there is ABSOLUTELY NO evidence that squash courts exist (venue closed, no squash facilities mentioned anywhere, etc.).\n5. If a Facebook page requires login but you can see it exists, try to find information from other sources (website, Google Maps, reviews).\n6. If the official website mentions squash but doesn't specify count, check Facebook posts, reviews, or other sources for the number.\n7. Be thorough - check multiple sources before concluding no evidence exists.\n8. EXCLUDE squash.players.app from all searches - this is our own directory and should not be used as a source (it would be circular to use our own data to update our own data).\n9. If you find the official website but it doesn't have facilities info on the homepage, search for the facilities page specifically (e.g., victoria.co.za/facilities or mail.victoria.co.za/facilities.htm).\n10. DISTINGUISH between related websites: Some venues have both an estate/development website and a club/venue website. Always use the CLUB website for facilities information.",
                 'temperature' => 0.2,
             ]);
 
@@ -179,8 +266,19 @@ class CourtCountAnalyzer
      */
     protected function parseAIResponse(string $content): array
     {
+        // Remove markdown code blocks if present (```json ... ```)
+        $cleanedContent = $content;
+        if (preg_match('/```(?:json)?\s*(\{.*?\})\s*```/s', $content, $matches)) {
+            $cleanedContent = $matches[1];
+        } elseif (preg_match('/```(?:json)?\s*(\{.*)/s', $content, $matches)) {
+            // Handle unclosed code blocks
+            $cleanedContent = $matches[1];
+            // Remove trailing ``` if present
+            $cleanedContent = preg_replace('/```\s*$/', '', $cleanedContent);
+        }
+        
         // Try to parse as JSON
-        $json = json_decode($content, true);
+        $json = json_decode($cleanedContent, true);
         
         if (json_last_error() === JSON_ERROR_NONE && is_array($json)) {
             return [
