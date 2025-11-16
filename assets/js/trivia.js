@@ -17,6 +17,8 @@
          */
         init: function() {
             console.log('Initializing Squash Trivia...');
+            console.log('API URL:', this.config.apiUrl);
+            console.log('Config object:', this.config);
             
             // Load data for each section
             if ($('#countries-without-venues').length) {

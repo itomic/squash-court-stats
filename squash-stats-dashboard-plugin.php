@@ -207,10 +207,10 @@ class Squash_Stats_Dashboard {
             wp_enqueue_script('wordcloud2', 'https://cdn.jsdelivr.net/npm/wordcloud2.js@1.2.2/src/wordcloud2.min.js', array(), '1.2.2', true);
             
             // Enqueue custom trivia styles and scripts
-            wp_enqueue_style('squash-trivia-css', plugin_dir_url(__FILE__) . 'assets/css/trivia.css', array(), '1.0.0');
-            wp_enqueue_script('squash-trivia-js', plugin_dir_url(__FILE__) . 'assets/js/trivia.js', array('jquery', 'leaflet-js', 'chartjs'), '1.0.0', true);
+            wp_enqueue_style('squash-trivia-css', plugin_dir_url(__FILE__) . 'assets/css/trivia.css', array(), '1.5.0');
+            wp_enqueue_script('squash-trivia-js', plugin_dir_url(__FILE__) . 'assets/js/trivia.js', array('jquery', 'leaflet-js', 'chartjs'), '1.5.0', true);
             
-            // Pass API URL to JavaScript
+            // Pass API URL to JavaScript (must be called after wp_enqueue_script)
             wp_localize_script('squash-trivia-js', 'squashTriviaConfig', array(
                 'apiUrl' => $this->api_url,
                 'ajaxUrl' => admin_url('admin-ajax.php'),
