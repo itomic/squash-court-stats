@@ -4,6 +4,7 @@
     :showSearch="false">
     
     <div class="row">
+        @unless(isset($hideSidebar) && $hideSidebar)
         {{-- Side Navigation --}}
         <div class="col-lg-3 col-md-4 mb-4">
             <div class="card shadow-sm sticky-top" style="top: 20px;">
@@ -47,9 +48,10 @@
                 </div>
             </div>
         </div>
+        @endunless
         
         {{-- Main Content Area --}}
-        <div class="col-lg-9 col-md-8">
+        <div class="{{ (isset($hideSidebar) && $hideSidebar) ? 'col-12' : 'col-lg-9 col-md-8' }}">
             {{-- Countries Without Venues --}}
             <div id="countries-without-venues" class="trivia-section {{ (isset($activeMap) && $activeMap !== 'countries-without-venues') ? 'd-none' : '' }}">
                 <x-charts.countries-without-venues />

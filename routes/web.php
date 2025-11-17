@@ -40,7 +40,16 @@ Route::get('/trivia', function () {
         ? $sectionMap[$section] 
         : null;
     
-    return view('trivia.index', ['activeMap' => $activeMap]);
+    // Check if page is embedded (via iframe)
+    $isEmbedded = request()->has('embed') || request()->has('embedded');
+    
+    // Hide sidebar if embedded AND a specific section is requested
+    $hideSidebar = $isEmbedded && $activeMap !== null;
+    
+    return view('trivia.index', [
+        'activeMap' => $activeMap,
+        'hideSidebar' => $hideSidebar
+    ]);
 })->name('trivia.index');
 
 Route::get('/trivia/countries-without-venues', function () {
