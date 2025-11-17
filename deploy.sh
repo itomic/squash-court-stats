@@ -48,13 +48,22 @@ cd "$REPO_DIR" || error "Failed to change to repository directory"
 # Ensure we're on main branch
 git checkout main || warning "Could not checkout main branch (may already be on main)"
 
+# Determine if we need to use sudo or su
+if [ "$(id -u)" -eq 0 ]; then
+    # Running as root, use su
+    RUN_AS_USER="su - $PHP_USER -c"
+else
+    # Running as regular user, use sudo
+    RUN_AS_USER="sudo -u $PHP_USER"
+fi
+
 # Pull latest changes
-if ! sudo -u "$PHP_USER" git pull origin main; then
+if ! $RUN_AS_USER "cd $REPO_DIR && git pull origin main"; then
     error "Failed to pull latest changes from GitHub"
 fi
 
 # Get the latest commit hash for logging
-LATEST_COMMIT=$(cd "$REPO_DIR" && sudo -u "$PHP_USER" git rev-parse --short HEAD)
+LATEST_COMMIT=$(cd "$REPO_DIR" && $RUN_AS_USER "cd $REPO_DIR && git rev-parse --short HEAD")
 log "✅ Pulled commit: $LATEST_COMMIT"
 
 # Verify current directory exists
@@ -95,13 +104,13 @@ fi
 
 # Install npm dependencies
 log "📦 Installing npm dependencies..."
-if ! sudo -u "$PHP_USER" /bin/bash -c "export PATH=$NODE_PATH:/usr/local/bin:/usr/bin:/bin && cd $CURRENT_DIR && $NPM_PATH install --production=false"; then
+if ! $RUN_AS_USER "export PATH=$NODE_PATH:/usr/local/bin:/usr/bin:/bin && cd $CURRENT_DIR && $NPM_PATH install --production=false"; then
     error "Failed to install npm dependencies"
 fi
 
 # Build frontend assets
 log "🔨 Building frontend assets..."
-if ! sudo -u "$PHP_USER" /bin/bash -c "export PATH=$NODE_PATH:/usr/local/bin:/usr/bin:/bin && cd $CURRENT_DIR && $NPM_PATH run build"; then
+if ! $RUN_AS_USER "export PATH=$NODE_PATH:/usr/local/bin:/usr/bin:/bin && cd $CURRENT_DIR && $NPM_PATH run build"; then
     error "Failed to build frontend assets"
 fi
 
@@ -114,9 +123,9 @@ rm -f "$CURRENT_DIR/bootstrap/cache/*.php" 2>/dev/null || true
 rm -rf "$CURRENT_DIR/storage/framework/views/*" 2>/dev/null || true
 
 # Try to clear Laravel caches using artisan (may fail if .env is missing, that's OK)
-sudo -u "$PHP_USER" /bin/bash -c "cd $CURRENT_DIR && php artisan view:clear" 2>/dev/null || warning "Could not clear view cache (may need .env configuration)"
-sudo -u "$PHP_USER" /bin/bash -c "cd $CURRENT_DIR && php artisan config:clear" 2>/dev/null || warning "Could not clear config cache"
-sudo -u "$PHP_USER" /bin/bash -c "cd $CURRENT_DIR && php artisan cache:clear" 2>/dev/null || warning "Could not clear application cache"
+$RUN_AS_USER "cd $CURRENT_DIR && php artisan view:clear" 2>/dev/null || warning "Could not clear view cache (may need .env configuration)"
+$RUN_AS_USER "cd $CURRENT_DIR && php artisan config:clear" 2>/dev/null || warning "Could not clear config cache"
+$RUN_AS_USER "cd $CURRENT_DIR && php artisan cache:clear" 2>/dev/null || warning "Could not clear application cache"
 
 # Ensure build symlink is correct
 log "🔗 Ensuring build symlink is correct..."
