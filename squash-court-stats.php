@@ -3,7 +3,7 @@
  * Plugin Name: Squash Court Stats
  * Plugin URI: https://stats.squashplayers.app
  * Description: Embeds dashboards and reports from stats.squashplayers.app into WordPress using shortcode [squash_court_stats]. Use dashboard="name" for dashboards or report="name" for trivia reports.
- * Version: 1.5.0
+ * Version: 1.6.1
  * Author: Itomic Apps
  * Author URI: https://www.itomic.com.au
  * License: GPL v2 or later
@@ -41,6 +41,22 @@ class Squash_Stats_Dashboard {
         
         // Add admin help tabs
         add_action('admin_head', array($this, 'add_help_tabs'));
+        
+        // Add admin menu page for Settings
+        add_action('admin_menu', array($this, 'add_admin_menu'));
+        
+        // Add Settings link to plugin action links (appears before Deactivate)
+        // Note: plugin_basename(__FILE__) returns 'squash-court-stats/squash-court-stats.php' when installed
+        add_filter('plugin_action_links_' . plugin_basename(__FILE__), array($this, 'add_plugin_action_links'), 10, 1);
+        
+        // Add "Check for updates" link in plugin row meta (appears below description)
+        add_filter('plugin_row_meta', array($this, 'add_plugin_row_meta'), 10, 2);
+        
+        // Handle "Check for updates" action
+        add_action('admin_init', array($this, 'handle_check_updates'));
+        
+        // Show success message on Updates page after checking
+        add_action('admin_notices', array($this, 'show_update_check_notice'));
     }
     
     /**
@@ -54,21 +70,46 @@ class Squash_Stats_Dashboard {
         if (is_a($post, 'WP_Post') && has_shortcode($post->post_content, 'squash_court_stats')) {
             ?>
             <style>
-                /* Full-width dashboard container */
+                /* Responsive dashboard container - works within any WordPress container */
                 .squash-dashboard-wrapper {
+                    width: 100%;
+                    max-width: 100%;
+                    margin: 0;
+                    padding: 0;
+                    position: relative;
+                    overflow: hidden;
+                    clear: both;
+                }
+                
+                /* Ensure iframe is responsive and fills container */
+                .squash-dashboard-iframe {
+                    width: 100%;
+                    max-width: 100%;
+                    display: block;
+                    margin: 0;
+                    padding: 0;
+                    border: 0;
+                    vertical-align: top;
+                }
+                
+                /* Full-width option - breaks out of containers when needed */
+                .squash-dashboard-wrapper.full-width {
                     width: 100vw;
+                    max-width: 100vw;
                     position: relative;
                     left: 50%;
                     right: 50%;
                     margin-left: -50vw;
                     margin-right: -50vw;
-                    max-width: 100vw;
                 }
                 
-                /* Ensure iframe is full width within wrapper */
-                .squash-dashboard-iframe {
+                /* Compatibility fixes for common page builders */
+                .wp-block-group .squash-dashboard-wrapper,
+                .elementor-widget-container .squash-dashboard-wrapper,
+                .vc_row .squash-dashboard-wrapper,
+                .wpb_content_element .squash-dashboard-wrapper {
                     width: 100%;
-                    display: block;
+                    max-width: 100%;
                 }
             </style>
             <?php
@@ -94,21 +135,33 @@ class Squash_Stats_Dashboard {
             'filter' => '',     // Geographic filter (e.g., 'country:AU', 'region:19', 'continent:5')
             'title' => '',      // Custom title override for charts/map
             'class' => '',      // Allow custom CSS classes
+            'fullwidth' => '',  // Set to 'true' or '1' to enable full-width breakout
         ), $atts);
         
         // Build the iframe URL
         $url = $this->dashboard_url;
         $query_params = array();
         
+        // Track if this is the full trivia dashboard (needs nav visible)
+        $is_full_trivia = false;
+        
         // Handle report parameter (trivia sections)
         if (!empty($atts['report'])) {
             $url .= '/trivia';
             $query_params['section'] = $atts['report'];
+            // Individual reports should hide nav (embed=1 will be added below)
         }
         // Handle dashboard parameter
         elseif (!empty($atts['dashboard'])) {
-            $url .= '/render';
-            $query_params['dashboard'] = $atts['dashboard'];
+            // Special case: dashboard="trivia" goes to full trivia page
+            if ($atts['dashboard'] === 'trivia') {
+                $url .= '/trivia';
+                // No section parameter = show full trivia page
+                $is_full_trivia = true; // Don't hide nav for full trivia page
+            } else {
+                $url .= '/render';
+                $query_params['dashboard'] = $atts['dashboard'];
+            }
         }
         // Handle charts parameter
         elseif (!empty($atts['charts'])) {
@@ -128,21 +181,32 @@ class Squash_Stats_Dashboard {
         }
         
         // Add embed parameter to hide navigation/header
-        $query_params['embed'] = '1';
+        // Exception: Full trivia dashboard should show nav, so don't add embed=1
+        if (!$is_full_trivia) {
+            $query_params['embed'] = '1';
+        }
         
         // Build query string
         if (!empty($query_params)) {
             $url .= '?' . http_build_query($query_params);
-        } else {
-            // If no query params, just add embed parameter
-            $url .= '?embed=1';
         }
+        // Note: If no query params and not full trivia, embed=1 is already in query_params above
         
         // Generate unique ID for this iframe instance
         $iframe_id = 'squash-dashboard-' . uniqid();
         
-        // Wrap iframe in full-width container
-        $html = '<div class="squash-dashboard-wrapper">';
+        // Determine if full-width should be enabled
+        $fullwidth = !empty($atts['fullwidth']) && in_array(strtolower($atts['fullwidth']), array('true', '1', 'yes', 'on'));
+        $wrapper_class = 'squash-dashboard-wrapper';
+        if ($fullwidth) {
+            $wrapper_class .= ' full-width';
+        }
+        if (!empty($atts['class'])) {
+            $wrapper_class .= ' ' . esc_attr($atts['class']);
+        }
+        
+        // Wrap iframe in responsive container
+        $html = '<div class="' . esc_attr($wrapper_class) . '">';
         
         // Build iframe HTML
         $html .= sprintf(
@@ -153,14 +217,13 @@ class Squash_Stats_Dashboard {
                 style="border: none; display: block; overflow: hidden; min-height: 500px;"
                 frameborder="0"
                 scrolling="no"
-                class="squash-dashboard-iframe %s"
+                class="squash-dashboard-iframe"
                 loading="lazy"
                 sandbox="allow-scripts allow-same-origin allow-popups"
                 title="Squash Court Stats">
             </iframe>',
             esc_attr($iframe_id),
-            esc_url($url),
-            esc_attr($atts['class'])
+            esc_url($url)
         );
         
         // Add postMessage listener for dynamic height adjustment
@@ -208,7 +271,7 @@ class Squash_Stats_Dashboard {
         $screen = get_current_screen();
         
         // Only add help tabs on relevant pages
-        if (!$screen || !in_array($screen->id, array('plugins', 'settings_page_squash-stats', 'post', 'page'))) {
+        if (!$screen || !in_array($screen->id, array('plugins', 'settings_page_squash-court-stats', 'post', 'page'))) {
             return;
         }
         
@@ -270,6 +333,7 @@ class Squash_Stats_Dashboard {
                '<li><code>[squash_court_stats dashboard="world"]</code> - ' . __('World statistics dashboard', 'squash-court-stats') . '</li>' .
                '<li><code>[squash_court_stats dashboard="country"]</code> - ' . __('Country statistics dashboard', 'squash-court-stats') . '</li>' .
                '<li><code>[squash_court_stats dashboard="venue-types"]</code> - ' . __('Venue types dashboard', 'squash-court-stats') . '</li>' .
+               '<li><code>[squash_court_stats dashboard="trivia"]</code> - ' . __('Full trivia page with all trivia sections', 'squash-court-stats') . '</li>' .
                '</ul>' .
                
                '<p><strong>' . __('Reports', 'squash-court-stats') . '</strong></p>' .
@@ -290,6 +354,7 @@ class Squash_Stats_Dashboard {
                '<ul>' .
                '<li><code>filter="country:AU"</code> - ' . __('Geographic filter', 'squash-court-stats') . '</li>' .
                '<li><code>class="my-custom-class"</code> - ' . __('Custom CSS class', 'squash-court-stats') . '</li>' .
+               '<li><code>fullwidth="true"</code> - ' . __('Enable full-width display (breaks out of container)', 'squash-court-stats') . '</li>' .
                '</ul>';
     }
     
@@ -329,18 +394,273 @@ class Squash_Stats_Dashboard {
                '<p><a href="https://www.itomic.com.au" target="_blank">' . __('Itomic Apps', 'squash-court-stats') . '</a></p>';
     }
     
+    /**
+     * Add admin menu page for Settings
+     */
+    public function add_admin_menu() {
+        add_options_page(
+            __('Squash Court Stats Settings', 'squash-court-stats'),
+            __('Squash Court Stats', 'squash-court-stats'),
+            'manage_options',
+            'squash-court-stats',
+            array($this, 'render_settings_page')
+        );
+    }
+    
+    /**
+     * Render the settings page
+     */
+    public function render_settings_page() {
+        ?>
+        <div class="wrap">
+            <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
+            
+            <?php
+            // Show success message if update check was just performed
+            if (isset($_GET['squash-update-checked']) && $_GET['squash-update-checked'] == '1') {
+                echo '<div class="notice notice-success is-dismissible"><p>';
+                _e('Update check completed. If an update is available, you will see it on the Plugins page or Updates page.', 'squash-court-stats');
+                echo '</p></div>';
+            }
+            ?>
+            
+            <div class="squash-court-stats-settings">
+                <div class="card" style="max-width: 800px;">
+                    <h2><?php _e('Plugin Updates', 'squash-court-stats'); ?></h2>
+                    <p><?php _e('This plugin automatically checks for updates every 12 hours. You can also check for updates manually:', 'squash-court-stats'); ?></p>
+                    <?php
+                    $check_url = wp_nonce_url(
+                        admin_url('plugins.php?squash-court-stats-check-updates=1'),
+                        'squash-court-stats-check-updates'
+                    );
+                    ?>
+                    <p>
+                        <a href="<?php echo esc_url($check_url); ?>" class="button button-primary">
+                            <?php _e('Check for updates now', 'squash-court-stats'); ?>
+                        </a>
+                        <a href="<?php echo esc_url(admin_url('update-core.php')); ?>" class="button">
+                            <?php _e('View all updates', 'squash-court-stats'); ?>
+                        </a>
+                    </p>
+                    <p class="description">
+                        <?php _e('This will clear the update cache and force WordPress to check GitHub for the latest release.', 'squash-court-stats'); ?>
+                    </p>
+                </div>
+                
+                <div class="card" style="max-width: 800px; margin-top: 20px;">
+                    <h2><?php _e('Quick Start', 'squash-court-stats'); ?></h2>
+                    <ol>
+                        <li><?php _e('Go to any page or post editor', 'squash-court-stats'); ?></li>
+                        <li><?php _e('Add the shortcode:', 'squash-court-stats'); ?> <code>[squash_court_stats]</code></li>
+                        <li><?php _e('Publish and view your page!', 'squash-court-stats'); ?></li>
+                    </ol>
+                </div>
+                
+                <div class="card" style="max-width: 800px; margin-top: 20px;">
+                    <h2><?php _e('Shortcode Reference', 'squash-court-stats'); ?></h2>
+                    
+                    <h3><?php _e('Basic Usage', 'squash-court-stats'); ?></h3>
+                    <p><code>[squash_court_stats]</code></p>
+                    <p><?php _e('Displays the default world dashboard.', 'squash-court-stats'); ?></p>
+                    
+                    <h3><?php _e('Dashboards', 'squash-court-stats'); ?></h3>
+                    <ul>
+                        <li><code>[squash_court_stats dashboard="world"]</code> - <?php _e('World statistics dashboard', 'squash-court-stats'); ?></li>
+                        <li><code>[squash_court_stats dashboard="country"]</code> - <?php _e('Country statistics dashboard', 'squash-court-stats'); ?></li>
+                        <li><code>[squash_court_stats dashboard="venue-types"]</code> - <?php _e('Venue types dashboard', 'squash-court-stats'); ?></li>
+                        <li><code>[squash_court_stats dashboard="trivia"]</code> - <?php _e('Full trivia page with all trivia sections', 'squash-court-stats'); ?></li>
+                    </ul>
+                    
+                    <h3><?php _e('Reports', 'squash-court-stats'); ?></h3>
+                    <ul>
+                        <li><code>[squash_court_stats report="graveyard"]</code> - <?php _e('Squash court graveyard', 'squash-court-stats'); ?></li>
+                        <li><code>[squash_court_stats report="high-altitude"]</code> - <?php _e('High altitude venues', 'squash-court-stats'); ?></li>
+                        <li><code>[squash_court_stats report="loneliest"]</code> - <?php _e('Loneliest courts', 'squash-court-stats'); ?></li>
+                        <li><code>[squash_court_stats report="word-cloud"]</code> - <?php _e('Countries word cloud', 'squash-court-stats'); ?></li>
+                    </ul>
+                    
+                    <h3><?php _e('Individual Charts', 'squash-court-stats'); ?></h3>
+                    <ul>
+                        <li><code>[squash_court_stats charts="venue-map"]</code> - <?php _e('Just the map', 'squash-court-stats'); ?></li>
+                        <li><code>[squash_court_stats charts="summary-stats,top-venues"]</code> - <?php _e('Multiple charts', 'squash-court-stats'); ?></li>
+                    </ul>
+                    
+                    <h3><?php _e('Additional Parameters', 'squash-court-stats'); ?></h3>
+                    <ul>
+                        <li><code>filter="country:AU"</code> - <?php _e('Geographic filter', 'squash-court-stats'); ?></li>
+                        <li><code>class="my-custom-class"</code> - <?php _e('Custom CSS class', 'squash-court-stats'); ?></li>
+                        <li><code>fullwidth="true"</code> - <?php _e('Enable full-width display (breaks out of container)', 'squash-court-stats'); ?></li>
+                    </ul>
+                </div>
+                
+                <div class="card" style="max-width: 800px; margin-top: 20px;">
+                    <h2><?php _e('Examples', 'squash-court-stats'); ?></h2>
+                    
+                    <h3><?php _e('1. Default Dashboard', 'squash-court-stats'); ?></h3>
+                    <p><code>[squash_court_stats dashboard="world"]</code></p>
+                    <p><?php _e('Shows the full world statistics dashboard.', 'squash-court-stats'); ?></p>
+                    
+                    <h3><?php _e('2. Specific Report', 'squash-court-stats'); ?></h3>
+                    <p><code>[squash_court_stats report="graveyard"]</code></p>
+                    <p><?php _e('Shows only the squash court graveyard report.', 'squash-court-stats'); ?></p>
+                    
+                    <h3><?php _e('3. Custom Chart Combination', 'squash-court-stats'); ?></h3>
+                    <p><code>[squash_court_stats charts="venue-map,summary-stats,top-venues"]</code></p>
+                    <p><?php _e('Shows only the selected charts.', 'squash-court-stats'); ?></p>
+                    
+                    <h3><?php _e('4. With Custom Styling', 'squash-court-stats'); ?></h3>
+                    <p><code>[squash_court_stats dashboard="world" class="my-custom-class"]</code></p>
+                    <p><?php _e('Adds a custom CSS class for styling.', 'squash-court-stats'); ?></p>
+                    
+                    <h3><?php _e('5. Full-Width Display', 'squash-court-stats'); ?></h3>
+                    <p><code>[squash_court_stats dashboard="world" fullwidth="true"]</code></p>
+                    <p><?php _e('Breaks out of the content container to display full-width across the page.', 'squash-court-stats'); ?></p>
+                </div>
+                
+                <div class="card" style="max-width: 800px; margin-top: 20px;">
+                    <h2><?php _e('More Information', 'squash-court-stats'); ?></h2>
+                    <ul>
+                        <li><a href="https://stats.squashplayers.app/charts" target="_blank"><?php _e('Browse Chart Gallery', 'squash-court-stats'); ?></a></li>
+                        <li><a href="https://github.com/itomic/squash-court-stats" target="_blank"><?php _e('GitHub Repository', 'squash-court-stats'); ?></a></li>
+                        <li><a href="https://www.itomic.com.au" target="_blank"><?php _e('Itomic Apps', 'squash-court-stats'); ?></a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <?php
+    }
+    
+    /**
+     * Add Settings link to plugin action links
+     * This adds a "Settings" link before "Deactivate" (standard WordPress convention)
+     */
+    public function add_plugin_action_links($links) {
+        // Link to the settings page
+        $settings_url = admin_url('options-general.php?page=squash-court-stats');
+        $settings_link = '<a href="' . esc_url($settings_url) . '">' . __('Settings', 'squash-court-stats') . '</a>';
+        
+        // Add it at the beginning of the links array
+        array_unshift($links, $settings_link);
+        
+        return $links;
+    }
+    
+    /**
+     * Add "Check for updates" link in plugin row meta
+     * This appears below the plugin description on the Plugins page
+     * 
+     * @param array $links Existing meta links
+     * @param string $file Plugin file
+     * @return array Modified links
+     */
+    public function add_plugin_row_meta($links, $file) {
+        // Only add to our plugin
+        if ($file !== plugin_basename(__FILE__)) {
+            return $links;
+        }
+        
+        // Add "Check for updates" link
+        $check_url = wp_nonce_url(
+            admin_url('plugins.php?squash-court-stats-check-updates=1'),
+            'squash-court-stats-check-updates'
+        );
+        $check_link = '<a href="' . esc_url($check_url) . '">' . __('Check for updates', 'squash-court-stats') . '</a>';
+        
+        // Add after existing links
+        $links[] = $check_link;
+        
+        return $links;
+    }
+    
+    /**
+     * Handle "Check for updates" action
+     * Clears update cache and forces WordPress to check for updates
+     */
+    public function handle_check_updates() {
+        // Check if this is our update check request
+        if (!isset($_GET['squash-court-stats-check-updates']) || !isset($_GET['_wpnonce'])) {
+            return;
+        }
+        
+        // Verify nonce for security
+        if (!wp_verify_nonce($_GET['_wpnonce'], 'squash-court-stats-check-updates')) {
+            wp_die(__('Security check failed', 'squash-court-stats'));
+        }
+        
+        // Check user permissions
+        if (!current_user_can('update_plugins')) {
+            wp_die(__('You do not have permission to update plugins', 'squash-court-stats'));
+        }
+        
+        // Clear update cache for our plugin
+        $cache_key = 'squash_dashboard_update_' . md5('itomic/squash-court-stats');
+        delete_transient($cache_key);
+        
+        // Clear WordPress update transients
+        delete_site_transient('update_plugins');
+        
+        // Force WordPress to check for updates
+        wp_update_plugins();
+        
+        // Redirect to Updates page with success message
+        $redirect_url = add_query_arg(
+            'squash-update-checked',
+            '1',
+            admin_url('update-core.php')
+        );
+        
+        wp_safe_redirect($redirect_url);
+        exit;
+    }
+    
+    /**
+     * Show success notice on Updates page after checking for updates
+     */
+    public function show_update_check_notice() {
+        // Only show on Updates page
+        $screen = get_current_screen();
+        if (!$screen || $screen->id !== 'update-core') {
+            return;
+        }
+        
+        // Check if update check was just performed
+        if (isset($_GET['squash-update-checked']) && $_GET['squash-update-checked'] == '1') {
+            echo '<div class="notice notice-success is-dismissible"><p>';
+            _e('Update check completed for Squash Court Stats. If an update is available, it will appear in the list below.', 'squash-court-stats');
+            echo '</p></div>';
+        }
+    }
+    
     
 }
 
 // Initialize the plugin
 new Squash_Stats_Dashboard();
 
-// Initialize the updater (only if the class exists - for self-hosted installations)
+// Initialize the updater (only for self-hosted installations, NOT for WordPress.org)
 // WordPress.org plugins use the built-in update system and should not include this file
+// The Update URI header tells WordPress this is a self-hosted plugin
 if (is_admin() && class_exists('Squash_Stats_Dashboard_Updater')) {
-    new Squash_Stats_Dashboard_Updater(
-        plugin_basename(__FILE__),
-        'itomic/squash-court-stats'
-    );
+    // Only initialize updater if Update URI is set (indicates self-hosted)
+    // This prevents warnings in Plugin Check tool for WordPress.org submissions
+    $plugin_data = get_file_data(__FILE__, array('UpdateURI' => 'Update URI'));
+    
+    // If Update URI is set and points to GitHub (not wordpress.org), use custom updater
+    if (!empty($plugin_data['UpdateURI']) && strpos($plugin_data['UpdateURI'], 'wordpress.org') === false) {
+        $updater = new Squash_Stats_Dashboard_Updater(
+            plugin_basename(__FILE__),
+            'itomic/squash-court-stats'
+        );
+        
+        // Opt into WordPress auto-updates (WordPress 5.5+)
+        // This allows users to enable auto-updates from the Plugins page
+        add_filter('auto_update_plugin', function($update, $item) {
+            // Only auto-update this specific plugin
+            if (isset($item->plugin) && $item->plugin === plugin_basename(__FILE__)) {
+                return true; // Allow auto-updates (user can still disable per-plugin)
+            }
+            return $update;
+        }, 10, 2);
+    }
 }
 
