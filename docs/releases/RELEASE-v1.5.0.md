@@ -63,7 +63,7 @@
 ### 📚 Documentation
 - **TRIVIA-SHORTCODE-GUIDE.md** - Complete usage guide for trivia shortcode
 - **TRIVIA-IMPLEMENTATION-SUMMARY.md** - Technical documentation
-- Updated **SHORTCODE-USAGE-GUIDE.md** with trivia examples
+- Updated **docs/wordpress-plugin/SHORTCODE-USAGE-GUIDE.md** with trivia examples
 - Comprehensive inline code documentation
 
 ### 📦 Installation & Usage

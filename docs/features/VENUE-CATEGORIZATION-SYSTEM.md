@@ -205,7 +205,7 @@ Reports saved to: `storage/logs/suggested-new-categories.json`
 
 ⚠️ **Important:** Database write permissions are required for production use.
 
-See `DATABASE-PERMISSIONS-SETUP.md` for detailed setup instructions.
+See `docs/deployment/DATABASE-PERMISSIONS-SETUP.md` for detailed setup instructions.
 
 Current status:
 - ✅ Dry-run mode works (no permissions needed)
@@ -289,7 +289,7 @@ php artisan tinker
 
 ### Database Permission Errors
 
-See `DATABASE-PERMISSIONS-SETUP.md` for permission setup.
+See `docs/deployment/DATABASE-PERMISSIONS-SETUP.md` for permission setup.
 
 ## Files Created
 
@@ -311,12 +311,12 @@ See `DATABASE-PERMISSIONS-SETUP.md` for permission setup.
 - `config/services.php` - Added Google Places and OpenAI config
 
 ### Documentation
-- `VENUE-CATEGORIZATION-SYSTEM.md` (this file)
-- `DATABASE-PERMISSIONS-SETUP.md`
+- `docs/features/VENUE-CATEGORIZATION-SYSTEM.md` (this file)
+- `docs/deployment/DATABASE-PERMISSIONS-SETUP.md`
 
 ## Next Steps
 
-1. ✅ Set up database write permissions (see `DATABASE-PERMISSIONS-SETUP.md`)
+1. ✅ Set up database write permissions (see `docs/deployment/DATABASE-PERMISSIONS-SETUP.md`)
 2. ✅ Run migration to create audit log table
 3. ✅ Test with 5 venues (actual database updates)
 4. ✅ Review results and adjust confidence thresholds if needed

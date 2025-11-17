@@ -77,7 +77,7 @@ Or when editing a page/post:
 ### ✅ External (What You Have)
 - **GitHub README** - For developers
 - **Chart Gallery** - Visual reference at stats.squashplayers.app/charts
-- **Documentation Files** - SHORTCODE-USAGE-GUIDE.md, etc.
+- **Documentation Files** - docs/wordpress-plugin/SHORTCODE-USAGE-GUIDE.md, etc.
 
 ### Recommended Approach
 

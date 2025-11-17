@@ -64,7 +64,7 @@ This is a well-known CSS pattern for breaking out of content containers while ma
 
 ### Full Changelog
 
-See [PLUGIN-README.md](PLUGIN-README.md) for complete version history.
+See [docs/wordpress-plugin/PLUGIN-README.md](docs/wordpress-plugin/PLUGIN-README.md) for complete version history.
 
 ---
 

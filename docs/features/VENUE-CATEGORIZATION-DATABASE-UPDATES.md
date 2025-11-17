@@ -49,7 +49,7 @@ To perform these updates, the database user needs:
 2. **CREATE** permission (one-time, to create `venue_category_updates` table)
 3. **INSERT** on `venue_category_updates` table
 
-See `DATABASE-PERMISSIONS-SETUP.md` for full SQL commands.
+See `docs/deployment/DATABASE-PERMISSIONS-SETUP.md` for full SQL commands.
 
 ---
 
