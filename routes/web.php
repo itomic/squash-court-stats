@@ -48,7 +48,8 @@ Route::get('/trivia', function () {
     
     return view('trivia.index', [
         'activeMap' => $activeMap,
-        'hideSidebar' => $hideSidebar
+        'hideSidebar' => $hideSidebar,
+        'isEmbedded' => $isEmbedded
     ]);
 })->name('trivia.index');
 

@@ -7,7 +7,7 @@
         @unless(isset($hideSidebar) && $hideSidebar)
         {{-- Side Navigation --}}
         <div class="col-lg-3 col-md-4 mb-4">
-            <div class="card shadow-sm sticky-top" style="top: 20px;">
+            <div class="card shadow-sm sticky-top" style="top: {{ (isset($isEmbedded) && $isEmbedded) ? '0' : '20' }}px;">
                 <div class="card-header bg-primary text-white">
                     <h6 class="mb-0"><i class="fas fa-list me-2"></i>Trivia Maps</h6>
                 </div>
