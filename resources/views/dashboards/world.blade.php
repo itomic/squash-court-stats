@@ -12,11 +12,6 @@
         <x-charts.venue-map />
     @endchartRelevant
     
-    {{-- Loneliest Courts Map --}}
-    @chartRelevant('loneliest-courts')
-        <x-charts.loneliest-courts />
-    @endchartRelevant
-    
     {{-- Continental Breakdown --}}
     @chartRelevant('continental-breakdown')
         <x-charts.continental-breakdown />
@@ -66,6 +61,11 @@
             <x-charts.outdoor-courts />
         @endchartRelevant
     </div>
+    
+    {{-- Loneliest Courts Map --}}
+    @chartRelevant('loneliest-courts')
+        <x-charts.loneliest-courts />
+    @endchartRelevant
     
 </x-dashboard-layout>
 
