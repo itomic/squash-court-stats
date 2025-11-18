@@ -7,6 +7,7 @@
 // Configuration
 $secret = '413d66fed586f3447e62dd9f2f574400868b1ebf738cdd4278cf31b0a0be3b6b';
 $repoDir = '/home/stats/repo';
+$deployScript = '/home/stats/deploy.sh';
 $logFile = '/home/stats/logs/webhook-deploy.log';
 
 // Get the payload
@@ -84,6 +85,7 @@ $logMessage = sprintf(
 );
 file_put_contents($logFile, $logMessage, FILE_APPEND);
 
+<<<<<<< HEAD
 // Pull latest changes from GitHub to cPanel-managed repository
 // Then trigger cPanel's built-in deployment using .cpanel.yml
 $logMessage = sprintf(
@@ -92,6 +94,8 @@ $logMessage = sprintf(
 );
 file_put_contents($logFile, $logMessage, FILE_APPEND);
 
+=======
+>>>>>>> develop
 // Verify repo directory exists
 if (!is_dir($repoDir)) {
     $errorMsg = "Repository directory not found: $repoDir";
@@ -100,6 +104,7 @@ if (!is_dir($repoDir)) {
     die(json_encode(['error' => $errorMsg]));
 }
 
+<<<<<<< HEAD
 // Pull from GitHub and then trigger cPanel deployment
 // cPanel's deployment uses .cpanel.yml file automatically
 $command = sprintf(
@@ -110,6 +115,21 @@ $command = sprintf(
 
 $logMessage = sprintf(
     "[%s] Executing: git pull + cPanel deployment\n",
+=======
+// Pull from GitHub and run deploy.sh
+// Note: We use deploy.sh instead of cPanel's UAPI VersionControlDeployment because:
+// - cPanel's UAPI returns success but doesn't actually deploy (repository not marked as "deployable")
+// - Custom deployment scripts are the industry-standard approach for automated cPanel deployments
+// - Provides better control, logging, and reliability
+$command = sprintf(
+    'cd %s && git pull origin main >> /home/stats/logs/deploy-output.log 2>&1 && bash %s >> /home/stats/logs/deploy-output.log 2>&1 &',
+    escapeshellarg($repoDir),
+    escapeshellarg($deployScript)
+);
+
+$logMessage = sprintf(
+    "[%s] Executing: git pull + deploy.sh (custom deployment script)\n",
+>>>>>>> develop
     date('Y-m-d H:i:s')
 );
 file_put_contents($logFile, $logMessage, FILE_APPEND);
@@ -119,14 +139,21 @@ exec($command);
 
 // Log execution attempt
 $logMessage = sprintf(
+<<<<<<< HEAD
     "[%s] Git pull and cPanel deployment initiated. Background process started.\n",
+=======
+    "[%s] Deployment initiated. Check deploy-output.log for results.\n",
+>>>>>>> develop
     date('Y-m-d H:i:s')
 );
 file_put_contents($logFile, $logMessage, FILE_APPEND);
 
+<<<<<<< HEAD
 // Note: Deployment will use .cpanel.yml automatically via cPanel's UAPI
 // Check /home/stats/logs/deploy-output.log for actual deployment results
 
+=======
+>>>>>>> develop
 // Return success
 http_response_code(200);
 echo json_encode([
