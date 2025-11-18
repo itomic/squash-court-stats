@@ -48,22 +48,35 @@ cd "$REPO_DIR" || error "Failed to change to repository directory"
 # Ensure we're on main branch
 git checkout main || warning "Could not checkout main branch (may already be on main)"
 
-# Determine if we need to use sudo or su
-if [ "$(id -u)" -eq 0 ]; then
+# Determine how to run commands as the PHP user
+CURRENT_USER=$(id -u)
+if [ "$CURRENT_USER" -eq 0 ]; then
     # Running as root, use su
     RUN_AS_USER="su - $PHP_USER -c"
-else
-    # Running as regular user, use sudo
+elif command -v sudo >/dev/null 2>&1; then
+    # Running as regular user, sudo is available
     RUN_AS_USER="sudo -u $PHP_USER"
+elif [ "$CURRENT_USER" = "$(id -u $PHP_USER 2>/dev/null)" ]; then
+    # Already running as the correct user, no need to switch
+    RUN_AS_USER=""
+else
+    # Can't switch users, but try to proceed anyway
+    warning "Cannot switch to user $PHP_USER (no sudo/su available). Running as current user."
+    RUN_AS_USER=""
 fi
 
 # Pull latest changes
-if ! $RUN_AS_USER "cd $REPO_DIR && git pull origin main"; then
-    error "Failed to pull latest changes from GitHub"
+if [ -n "$RUN_AS_USER" ]; then
+    if ! $RUN_AS_USER "cd $REPO_DIR && git pull origin main"; then
+        error "Failed to pull latest changes from GitHub"
+    fi
+    LATEST_COMMIT=$($RUN_AS_USER "cd $REPO_DIR && git rev-parse --short HEAD")
+else
+    if ! (cd "$REPO_DIR" && git pull origin main); then
+        error "Failed to pull latest changes from GitHub"
+    fi
+    LATEST_COMMIT=$(cd "$REPO_DIR" && git rev-parse --short HEAD)
 fi
-
-# Get the latest commit hash for logging
-LATEST_COMMIT=$(cd "$REPO_DIR" && $RUN_AS_USER "cd $REPO_DIR && git rev-parse --short HEAD")
 log "✅ Pulled commit: $LATEST_COMMIT"
 
 # Verify current directory exists
@@ -104,14 +117,26 @@ fi
 
 # Install npm dependencies
 log "📦 Installing npm dependencies..."
-if ! $RUN_AS_USER "export PATH=$NODE_PATH:/usr/local/bin:/usr/bin:/bin && cd $CURRENT_DIR && $NPM_PATH install --production=false"; then
-    error "Failed to install npm dependencies"
+if [ -n "$RUN_AS_USER" ]; then
+    if ! $RUN_AS_USER "export PATH=$NODE_PATH:/usr/local/bin:/usr/bin:/bin && cd $CURRENT_DIR && $NPM_PATH install --production=false"; then
+        error "Failed to install npm dependencies"
+    fi
+else
+    if ! (export PATH=$NODE_PATH:/usr/local/bin:/usr/bin:/bin && cd "$CURRENT_DIR" && $NPM_PATH install --production=false); then
+        error "Failed to install npm dependencies"
+    fi
 fi
 
 # Build frontend assets
 log "🔨 Building frontend assets..."
-if ! $RUN_AS_USER "export PATH=$NODE_PATH:/usr/local/bin:/usr/bin:/bin && cd $CURRENT_DIR && $NPM_PATH run build"; then
-    error "Failed to build frontend assets"
+if [ -n "$RUN_AS_USER" ]; then
+    if ! $RUN_AS_USER "export PATH=$NODE_PATH:/usr/local/bin:/usr/bin:/bin && cd $CURRENT_DIR && $NPM_PATH run build"; then
+        error "Failed to build frontend assets"
+    fi
+else
+    if ! (export PATH=$NODE_PATH:/usr/local/bin:/usr/bin:/bin && cd "$CURRENT_DIR" && $NPM_PATH run build); then
+        error "Failed to build frontend assets"
+    fi
 fi
 
 # Clear Laravel caches
