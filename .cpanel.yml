@@ -1,25 +1,57 @@
 ---
 deployment:
   tasks:
+    # Set deployment paths and Node.js version (Node 24)
     - export DEPLOYPATH=/home/stats/current
-    - export NODEJS=/opt/alt/alt-nodejs22/root/usr/bin/node
-    - export NPM=/opt/alt/alt-nodejs22/root/usr/bin/npm
-    - /bin/cp -R * $DEPLOYPATH
+    - export NODEJS=/opt/alt/alt-nodejs24/root/usr/bin/node
+    - export NPM=/opt/alt/alt-nodejs24/root/usr/bin/npm
+    - export PHP=/opt/cpanel/ea-php83/root/usr/bin/php
+    
+    # Create deployment directory if it doesn't exist
+    - mkdir -p $DEPLOYPATH
+    
+    # Sync files using rsync (excludes .git, node_modules, vendor, etc.)
+    - rsync -av --delete --exclude='.git' --exclude='node_modules' --exclude='vendor' --exclude='storage' --exclude='.env' --exclude='bootstrap/cache/*.php' --exclude='.cursor' . $DEPLOYPATH/
+    
+    # Set correct permissions
+    - chmod 755 $DEPLOYPATH
+    - chmod 755 $DEPLOYPATH/public 2>/dev/null || true
+    - chown -R stats:stats $DEPLOYPATH
+    
+    # Change to deployment directory
     - cd $DEPLOYPATH
+    
+    # Install npm dependencies
     - echo "Installing npm dependencies..."
-    - $NPM install --production=false
+    - export PATH=/opt/alt/alt-nodejs24/root/usr/bin:/usr/local/bin:/usr/bin:/bin && $NPM install --production=false
+    
+    # Build frontend assets
     - echo "Building frontend assets..."
-    - $NPM run build
+    - export PATH=/opt/alt/alt-nodejs24/root/usr/bin:/usr/local/bin:/usr/bin:/bin && $NPM run build
+    
+    # Clear Laravel caches (remove files directly, then try artisan)
     - echo "Clearing Laravel caches..."
-    - /opt/cpanel/ea-php83/root/usr/bin/php artisan config:clear
-    - /opt/cpanel/ea-php83/root/usr/bin/php artisan cache:clear
-    - /opt/cpanel/ea-php83/root/usr/bin/php artisan view:clear
+    - rm -f $DEPLOYPATH/bootstrap/cache/*.php 2>/dev/null || true
+    - rm -rf $DEPLOYPATH/storage/framework/views/* 2>/dev/null || true
+    - cd $DEPLOYPATH && $PHP artisan config:clear 2>/dev/null || echo "Config cache clear skipped (may need .env)"
+    - cd $DEPLOYPATH && $PHP artisan cache:clear 2>/dev/null || echo "Application cache clear skipped"
+    - cd $DEPLOYPATH && $PHP artisan view:clear 2>/dev/null || echo "View cache clear skipped"
+    
+    # Optimize for production (may fail if .env missing, that's OK)
     - echo "Optimizing for production..."
-    - /opt/cpanel/ea-php83/root/usr/bin/php artisan config:cache
-    - /opt/cpanel/ea-php83/root/usr/bin/php artisan route:cache
-    - /opt/cpanel/ea-php83/root/usr/bin/php artisan view:cache
+    - cd $DEPLOYPATH && $PHP artisan config:cache 2>/dev/null || echo "Config cache skipped"
+    - cd $DEPLOYPATH && $PHP artisan route:cache 2>/dev/null || echo "Route cache skipped"
+    - cd $DEPLOYPATH && $PHP artisan view:cache 2>/dev/null || echo "View cache skipped"
+    
+    # Ensure build symlink is correct
     - echo "Ensuring build symlink is correct..."
     - cd /home/stats/public_html
-    - if [ ! -L build ] || [ "$(readlink build)" != "/home/stats/current/public/build" ]; then rm -rf build && ln -s /home/stats/current/public/build build && echo "Build symlink updated"; fi
+    - if [ ! -L build ] || [ "$(readlink build)" != "/home/stats/current/public/build" ]; then rm -rf build && ln -s /home/stats/current/public/build build && echo "Build symlink updated"; else echo "Build symlink already correct"; fi
+    
+    # Final permission check
+    - chmod 755 /home/stats/current
+    - chmod 755 /home/stats/current/public 2>/dev/null || true
+    - chmod 755 /home/stats/public_html 2>/dev/null || true
+    
     - echo "Deployment complete! Site: https://stats.squashplayers.app/"
 

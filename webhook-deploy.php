@@ -84,45 +84,47 @@ $logMessage = sprintf(
 );
 file_put_contents($logFile, $logMessage, FILE_APPEND);
 
-// Execute deployment script in background
-$command = sprintf('bash %s > /home/stats/logs/deploy-output.log 2>&1 &', escapeshellarg($deployScript));
+// Pull latest changes from GitHub to cPanel-managed repository
+// Then trigger cPanel's built-in deployment using .cpanel.yml
 $logMessage = sprintf(
-    "[%s] Executing deployment command: %s\n",
-    date('Y-m-d H:i:s'),
-    $command
-);
-file_put_contents($logFile, $logMessage, FILE_APPEND);
-
-// Verify deploy script exists and is executable
-if (!file_exists($deployScript)) {
-    $errorMsg = "Deploy script not found: $deployScript";
-    file_put_contents($logFile, "[ERROR] $errorMsg\n", FILE_APPEND);
-    http_response_code(500);
-    die(json_encode(['error' => $errorMsg]));
-}
-
-if (!is_executable($deployScript)) {
-    $errorMsg = "Deploy script is not executable: $deployScript";
-    file_put_contents($logFile, "[ERROR] $errorMsg\n", FILE_APPEND);
-    http_response_code(500);
-    die(json_encode(['error' => $errorMsg]));
-}
-
-// Execute the command in background
-// Note: When using '&' to run in background, exec() returns immediately with code 0
-// The actual script execution happens asynchronously
-$output = [];
-$returnVar = 0;
-exec($command, $output, $returnVar);
-
-// Log execution attempt
-$logMessage = sprintf(
-    "[%s] Deployment command initiated. Background process started.\n",
+    "[%s] 📥 Pulling latest changes from GitHub to cPanel repository...\n",
     date('Y-m-d H:i:s')
 );
 file_put_contents($logFile, $logMessage, FILE_APPEND);
 
-// Note: Since the command runs in background with '&', we can't capture its return code here
+// Verify repo directory exists
+if (!is_dir($repoDir)) {
+    $errorMsg = "Repository directory not found: $repoDir";
+    file_put_contents($logFile, "[ERROR] $errorMsg\n", FILE_APPEND);
+    http_response_code(500);
+    die(json_encode(['error' => $errorMsg]));
+}
+
+// Pull from GitHub and then trigger cPanel deployment
+// cPanel's deployment uses .cpanel.yml file automatically
+$command = sprintf(
+    'cd %s && git pull origin main >> /home/stats/logs/deploy-output.log 2>&1 && /usr/bin/uapi VersionControlDeployment create repository_root=%s >> /home/stats/logs/deploy-output.log 2>&1 &',
+    escapeshellarg($repoDir),
+    escapeshellarg($repoDir)
+);
+
+$logMessage = sprintf(
+    "[%s] Executing: git pull + cPanel deployment\n",
+    date('Y-m-d H:i:s')
+);
+file_put_contents($logFile, $logMessage, FILE_APPEND);
+
+// Execute in background
+exec($command);
+
+// Log execution attempt
+$logMessage = sprintf(
+    "[%s] Git pull and cPanel deployment initiated. Background process started.\n",
+    date('Y-m-d H:i:s')
+);
+file_put_contents($logFile, $logMessage, FILE_APPEND);
+
+// Note: Deployment will use .cpanel.yml automatically via cPanel's UAPI
 // Check /home/stats/logs/deploy-output.log for actual deployment results
 
 // Return success
