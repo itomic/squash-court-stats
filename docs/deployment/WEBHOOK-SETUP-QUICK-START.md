@@ -3,6 +3,11 @@
 ## 🎯 Goal
 Configure GitHub to automatically trigger deployment when you push to the `main` branch.
 
+**Deployment Method:** Trigger File + Cron Job Pattern
+- Webhook creates a trigger file (`/home/stats/logs/webhook-trigger`)
+- Cron job (running as root every minute) checks for trigger and executes deployment
+- This is the industry-standard pattern for webhooks requiring elevated privileges
+
 ## ⚡ Quick Steps
 
 ### 1. Check Current Status
