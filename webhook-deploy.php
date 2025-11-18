@@ -13,11 +13,43 @@ $logFile = '/home/stats/logs/webhook-deploy.log';
 $payload = file_get_contents('php://input');
 $signature = $_SERVER['HTTP_X_HUB_SIGNATURE_256'] ?? '';
 
+// Handle GitHub ping event (webhook test)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($payload)) {
+    // GitHub sends a ping event when webhook is first created
+    $headers = getallheaders();
+    $eventType = $headers['X-GitHub-Event'] ?? '';
+    
+    if ($eventType === 'ping') {
+        http_response_code(200);
+        echo json_encode(['message' => 'Webhook is active and ready']);
+        exit;
+    }
+}
+
+// Log all requests for debugging
+$logMessage = sprintf(
+    "[%s] Webhook request: Method=%s, Event=%s, Signature=%s\n",
+    date('Y-m-d H:i:s'),
+    $_SERVER['REQUEST_METHOD'] ?? 'unknown',
+    $_SERVER['HTTP_X_GITHUB_EVENT'] ?? 'unknown',
+    !empty($signature) ? 'present' : 'missing'
+);
+file_put_contents($logFile, $logMessage, FILE_APPEND);
+
 // Verify GitHub signature
+if (empty($signature)) {
+    http_response_code(403);
+    $errorMsg = 'Missing signature header';
+    file_put_contents($logFile, "[ERROR] $errorMsg\n", FILE_APPEND);
+    die(json_encode(['error' => $errorMsg]));
+}
+
 $expectedSignature = 'sha256=' . hash_hmac('sha256', $payload, $secret);
 if (!hash_equals($expectedSignature, $signature)) {
     http_response_code(403);
-    die(json_encode(['error' => 'Invalid signature']));
+    $errorMsg = 'Invalid signature';
+    file_put_contents($logFile, "[ERROR] $errorMsg\n", FILE_APPEND);
+    die(json_encode(['error' => $errorMsg]));
 }
 
 // Parse payload
