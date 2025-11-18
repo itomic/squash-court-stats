@@ -50,20 +50,23 @@ git checkout main || warning "Could not checkout main branch (may already be on 
 
 # Determine how to run commands as the PHP user
 CURRENT_USER=$(id -u)
+PHP_USER_ID=$(id -u $PHP_USER 2>/dev/null)
+
 if [ "$CURRENT_USER" -eq 0 ]; then
     # Running as root, use su
     RUN_AS_USER="su - $PHP_USER -c"
-elif command -v sudo >/dev/null 2>&1 || [ -f /usr/bin/sudo ]; then
-    # sudo is available (check both PATH and common location)
-    SUDO_CMD=$(command -v sudo 2>/dev/null || echo "/usr/bin/sudo")
-    RUN_AS_USER="$SUDO_CMD -u $PHP_USER"
-    log "📝 Using '$SUDO_CMD' to switch to $PHP_USER"
-elif [ "$CURRENT_USER" = "$(id -u $PHP_USER 2>/dev/null)" ]; then
+    log "📝 Running as root, will use 'su' to switch to $PHP_USER"
+elif [ "$CURRENT_USER" = "$PHP_USER_ID" ]; then
     # Already running as the correct user, no need to switch
     RUN_AS_USER=""
+    log "📝 Already running as $PHP_USER, no user switching needed"
+elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    # sudo is available AND we can use it without password
+    RUN_AS_USER="sudo -u $PHP_USER"
+    log "📝 Using 'sudo' to switch to $PHP_USER"
 else
-    # Can't switch users, but try to proceed anyway
-    warning "Cannot switch to user $PHP_USER (no sudo/su available). Running as current user."
+    # Can't switch users, proceed as current user
+    warning "Cannot switch to user $PHP_USER. Running as current user ($(whoami))."
     RUN_AS_USER=""
 fi
 
