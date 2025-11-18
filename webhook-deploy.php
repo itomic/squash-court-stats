@@ -55,10 +55,24 @@ if (!hash_equals($expectedSignature, $signature)) {
 // Parse payload
 $data = json_decode($payload, true);
 
+if (json_last_error() !== JSON_ERROR_NONE) {
+    http_response_code(400);
+    $errorMsg = 'Invalid JSON payload: ' . json_last_error_msg();
+    file_put_contents($logFile, "[ERROR] $errorMsg\n", FILE_APPEND);
+    die(json_encode(['error' => $errorMsg]));
+}
+
 // Only deploy on push to main branch
 if (!isset($data['ref']) || $data['ref'] !== 'refs/heads/main') {
+    $branch = $data['ref'] ?? 'unknown';
+    $logMessage = sprintf(
+        "[%s] Skipping deployment - not main branch (ref: %s)\n",
+        date('Y-m-d H:i:s'),
+        $branch
+    );
+    file_put_contents($logFile, $logMessage, FILE_APPEND);
     http_response_code(200);
-    die(json_encode(['message' => 'Not main branch, skipping deployment']));
+    die(json_encode(['message' => 'Not main branch, skipping deployment', 'ref' => $branch]));
 }
 
 // Log the deployment request
