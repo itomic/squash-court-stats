@@ -6,6 +6,7 @@
 
 // Configuration
 $secret = '413d66fed586f3447e62dd9f2f574400868b1ebf738cdd4278cf31b0a0be3b6b';
+$repoDir = '/home/stats/repo';
 $deployScript = '/home/stats/deploy.sh';
 $logFile = '/home/stats/logs/webhook-deploy.log';
 
@@ -84,9 +85,40 @@ $logMessage = sprintf(
 );
 file_put_contents($logFile, $logMessage, FILE_APPEND);
 
-// Execute deployment script in background
-$command = sprintf('bash %s > /home/stats/logs/deploy-output.log 2>&1 &', escapeshellarg($deployScript));
+// Verify repo directory exists
+if (!is_dir($repoDir)) {
+    $errorMsg = "Repository directory not found: $repoDir";
+    file_put_contents($logFile, "[ERROR] $errorMsg\n", FILE_APPEND);
+    http_response_code(500);
+    die(json_encode(['error' => $errorMsg]));
+}
+
+// Pull from GitHub and run deploy.sh
+// Note: We use deploy.sh instead of cPanel's UAPI VersionControlDeployment because:
+// - cPanel's UAPI returns success but doesn't actually deploy (repository not marked as "deployable")
+// - Custom deployment scripts are the industry-standard approach for automated cPanel deployments
+// - Provides better control, logging, and reliability
+$command = sprintf(
+    'cd %s && git pull origin main >> /home/stats/logs/deploy-output.log 2>&1 && bash %s >> /home/stats/logs/deploy-output.log 2>&1 &',
+    escapeshellarg($repoDir),
+    escapeshellarg($deployScript)
+);
+
+$logMessage = sprintf(
+    "[%s] Executing: git pull + deploy.sh (custom deployment script)\n",
+    date('Y-m-d H:i:s')
+);
+file_put_contents($logFile, $logMessage, FILE_APPEND);
+
+// Execute in background
 exec($command);
+
+// Log execution attempt
+$logMessage = sprintf(
+    "[%s] Deployment initiated. Check deploy-output.log for results.\n",
+    date('Y-m-d H:i:s')
+);
+file_put_contents($logFile, $logMessage, FILE_APPEND);
 
 // Return success
 http_response_code(200);
