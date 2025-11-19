@@ -104,11 +104,6 @@
         </div>
     </nav>
 
-    @if($showSearch)
-    <!-- Geographic Search -->
-    <x-geographic-search />
-    @endif
-
     @if($hero)
     <!-- Hero Section -->
     <div class="hero">
@@ -124,6 +119,11 @@
     </div>
     @endif
     @endunless
+
+    @if($showSearch)
+    <!-- Geographic Search - Always show when showSearch is true, even when embedded -->
+    <x-geographic-search />
+    @endif
 
     <!-- Main Content -->
     <div class="container mb-5">
