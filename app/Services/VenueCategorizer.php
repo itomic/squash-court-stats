@@ -107,6 +107,11 @@ class VenueCategorizer
             'court_count_confidence' => null,
             'court_count_updated' => false,
             'court_count_flagged_for_deletion' => false,
+            'manual_review_required' => false,
+            'verification_performed' => false,
+            'verification_status' => null,
+            'verification_reasoning' => null,
+            'verification_source_url' => null,
         ];
 
         // Validate venue has Google Place ID
@@ -146,11 +151,39 @@ class VenueCategorizer
                     
                     $googlePlacesResult = $this->googlePlacesService->getPlaceDetails($newPlaceId);
                 } else {
-                    // Venue not found - flag for deletion
-                    Log::warning("Venue #{$venue->id} not found via Text Search - flagging for deletion");
+                    $verificationResult = $this->verifyVenueWithoutPlaceId($venue);
+                    $this->applyVerificationResult($result, $verificationResult);
+
+                    if ($verificationResult['evidence_found']) {
+                        Log::warning("Venue #{$venue->id} missing Place ID but external evidence confirms squash courts", [
+                            'venue_id' => $venue->id,
+                            'reasoning' => $verificationResult['reasoning'],
+                            'source_url' => $verificationResult['source_url'] ?? null,
+                        ]);
+
+                        $result['error'] = 'Place ID expired, but external evidence confirms venue';
+                        $result['reasoning'] = $verificationResult['reasoning'] ?? 'External verification indicates venue is active';
+                        $result['manual_review_required'] = true;
+                        return $result;
+                    }
+
+                    if ($verificationResult['needs_manual_review']) {
+                        Log::warning("Venue #{$venue->id} could not be verified via automation - manual review required", [
+                            'venue_id' => $venue->id,
+                            'reasoning' => $verificationResult['reasoning'],
+                        ]);
+
+                        $result['error'] = 'Place ID expired and automated verification inconclusive';
+                        $result['reasoning'] = $verificationResult['reasoning'] ?? 'Strong squash indicators detected - manual review required';
+                        $result['manual_review_required'] = true;
+                        return $result;
+                    }
+
+                    // Venue not found after verification - flag for deletion
+                    Log::warning("Venue #{$venue->id} not found via Text Search or external verification - flagging for deletion");
                     $this->flagVenueForDeletion($venue);
                     $result['error'] = 'Place ID expired and venue not found - flagged for deletion';
-                    $result['reasoning'] = 'Google Place ID expired, venue could not be found via Text Search';
+                    $result['reasoning'] = 'Google Place ID expired, venue could not be found via Text Search or external verification';
                     $result['venue_flagged_for_deletion'] = true;
                     return $result;
                 }
@@ -326,28 +359,145 @@ class VenueCategorizer
                     ]);
                 }
             } else {
-                // NO evidence of squash courts found - flag for deletion
+                // NO evidence of squash courts found - decide whether to defer deletion
                 $reasoning = $courtCountResult['reasoning'] ?? 'No evidence of squash courts found during web search';
-                $additionalDetails = [
-                    'source_url' => $courtCountResult['source_url'] ?? null,
-                    'search_api_used' => $courtCountResult['search_api_used'] ?? null,
-                    'search_results' => $courtCountResult['search_results'] ?? [],
-                    'venue_website' => $googlePlacesData['website'] ?? $googlePlacesData['websiteUri'] ?? null,
-                ];
-                $flagResult = $this->courtCountUpdater->flagVenueForDeletion($venue->id, $reasoning, $additionalDetails);
-                
-                if ($flagResult['success']) {
-                    $result['court_count_flagged_for_deletion'] = true;
-                    $result['venue_flagged_for_deletion'] = true;
-                    Log::warning("Venue #{$venue->id} flagged for deletion - no evidence of squash courts", [
+                $shouldDefer = $this->shouldDeferDeletionDueToSignals($venue, $googlePlacesData);
+
+                if ($shouldDefer) {
+                    $result['manual_review_required'] = true;
+                    $result['verification_performed'] = true;
+                    $result['verification_status'] = 'manual_review';
+                    $result['verification_reasoning'] = $reasoning;
+
+                    Log::warning("Venue #{$venue->id} requires manual review before deletion", [
                         'venue_id' => $venue->id,
                         'reasoning' => $reasoning,
                     ]);
+                } else {
+                    $additionalDetails = [
+                        'source_url' => $courtCountResult['source_url'] ?? null,
+                        'search_api_used' => $courtCountResult['search_api_used'] ?? null,
+                        'search_results' => $courtCountResult['search_results'] ?? [],
+                        'venue_website' => $googlePlacesData['website'] ?? $googlePlacesData['websiteUri'] ?? null,
+                    ];
+                    $flagResult = $this->courtCountUpdater->flagVenueForDeletion($venue->id, $reasoning, $additionalDetails);
+                    
+                    if ($flagResult['success']) {
+                        $result['court_count_flagged_for_deletion'] = true;
+                        $result['venue_flagged_for_deletion'] = true;
+                        Log::warning("Venue #{$venue->id} flagged for deletion - no evidence of squash courts", [
+                            'venue_id' => $venue->id,
+                            'reasoning' => $reasoning,
+                        ]);
+                    }
                 }
             }
         }
 
         return $result;
+    }
+
+    /**
+     * Apply verification metadata to the result array.
+     */
+    protected function applyVerificationResult(array &$result, array $verificationResult): void
+    {
+        $result['verification_performed'] = $verificationResult['performed'];
+        $result['verification_status'] = $verificationResult['status'];
+        $result['verification_reasoning'] = $verificationResult['reasoning'];
+        $result['verification_source_url'] = $verificationResult['source_url'] ?? null;
+        $result['manual_review_required'] = $result['manual_review_required'] || ($verificationResult['needs_manual_review'] ?? false);
+    }
+
+    /**
+     * Run external verification before deletion if Google data is unavailable.
+     */
+    protected function verifyVenueWithoutPlaceId(Venue $venue): array
+    {
+        $result = [
+            'performed' => false,
+            'status' => null,
+            'reasoning' => null,
+            'source_url' => null,
+            'needs_manual_review' => false,
+            'evidence_found' => false,
+        ];
+
+        $strongSignal = $this->hasStrongSquashSignal($venue);
+        if ($strongSignal) {
+            $result['needs_manual_review'] = true;
+            $result['status'] = 'manual_review';
+            $result['reasoning'] = 'Venue name or historical data strongly suggests squash activity';
+        }
+
+        if (!$this->courtCountAnalyzer) {
+            return $result;
+        }
+
+        $analysis = $this->courtCountAnalyzer->analyzeCourtCount(
+            $venue->name,
+            $venue->physical_address,
+            null
+        );
+
+        $result['performed'] = true;
+
+        if ($analysis['evidence_found']) {
+            $result['evidence_found'] = true;
+            $result['status'] = 'evidence_found';
+            $result['reasoning'] = $analysis['reasoning'];
+            $result['source_url'] = $analysis['source_url'] ?? null;
+            $result['needs_manual_review'] = true;
+        } elseif ($strongSignal) {
+            $result['reasoning'] = $result['reasoning'] ?? 'Strong squash indicators present, but automated search was inconclusive';
+        } else {
+            $result['status'] = 'no_evidence';
+            $result['reasoning'] = $analysis['reasoning'] ?? 'Automated search found no evidence of squash courts';
+        }
+
+        return $result;
+    }
+
+    /**
+     * Determine if deletion should be deferred due to strong squash signals.
+     */
+    protected function shouldDeferDeletionDueToSignals(Venue $venue, ?array $googlePlacesData = null): bool
+    {
+        if ($venue->no_of_courts && $venue->no_of_courts > 0) {
+            return true;
+        }
+
+        return $this->hasStrongSquashSignal($venue, $googlePlacesData);
+    }
+
+    /**
+     * Detect strong squash signals in venue data.
+     */
+    protected function hasStrongSquashSignal(Venue $venue, ?array $googlePlacesData = null): bool
+    {
+        $keywords = [
+            'squash',
+            'squash club',
+            'squash centre',
+            'squash center',
+            'squash stadium',
+            'raquetas',
+        ];
+
+        $namesToInspect = array_filter([
+            strtolower($venue->name),
+            strtolower($googlePlacesData['displayName'] ?? ''),
+        ]);
+
+        foreach ($namesToInspect as $name) {
+            foreach ($keywords as $keyword) {
+                if ($keyword && str_contains($name, strtolower($keyword))) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

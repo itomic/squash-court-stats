@@ -111,6 +111,9 @@ class CategorizeVenues extends Command
         // Show venues flagged for deletion in this batch
         $this->showFlaggedVenuesFromBatch($results);
 
+        // Show venues that require manual review
+        $this->showManualReviewVenues($results);
+
         // Show all venues currently flagged for deletion
         $this->showAllFlaggedVenues();
 
@@ -819,6 +822,41 @@ class CategorizeVenues extends Command
             foreach ($flaggedVenues as $venue) {
                 $this->line("{$venue['name']}, {$venue['address']}");
             }
+        }
+    }
+
+    /**
+     * Show venues that require manual review (verification failed or inconclusive).
+     */
+    protected function showManualReviewVenues(array $results): void
+    {
+        $manualReview = [];
+
+        foreach ($results as $result) {
+            if (!empty($result['manual_review_required'])) {
+                $manualReview[] = [
+                    'name' => $result['venue_name'],
+                    'address' => $result['venue_address'],
+                    'reasoning' => $result['verification_reasoning'] ?? $result['reasoning'],
+                ];
+            }
+        }
+
+        if (empty($manualReview)) {
+            return;
+        }
+
+        $this->newLine();
+        $this->info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        $this->warn('🕵️  Venues Requiring Manual Review (Verification Inconclusive):');
+        $this->newLine();
+
+        foreach ($manualReview as $venue) {
+            $line = "{$venue['name']}, {$venue['address']}";
+            if (!empty($venue['reasoning'])) {
+                $line .= " — {$venue['reasoning']}";
+            }
+            $this->line($line);
         }
     }
 
