@@ -86,7 +86,7 @@
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
                         <a class="nav-link {{ request()->routeIs('dashboard.world') ? 'active' : '' }}" href="{{ route('dashboard.world') }}">
-                            <i class="fas fa-globe me-1"></i>Stats
+                            <i class="fas fa-globe me-1"></i>Dashboard
                         </a>
                     </li>
                     <li class="nav-item">

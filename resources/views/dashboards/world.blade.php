@@ -22,11 +22,6 @@
         <x-charts.subcontinental-breakdown />
     @endchartRelevant
     
-    {{-- Timeline --}}
-    @chartRelevant('timeline')
-        <x-charts.timeline />
-    @endchartRelevant
-    
     {{-- State/County Breakdown --}}
     @chartRelevant('state-breakdown')
         <x-charts.state-breakdown />
@@ -65,6 +60,11 @@
     {{-- Loneliest Courts Map --}}
     @chartRelevant('loneliest-courts')
         <x-charts.loneliest-courts />
+    @endchartRelevant
+    
+    {{-- Timeline --}}
+    @chartRelevant('timeline')
+        <x-charts.timeline />
     @endchartRelevant
     
 </x-dashboard-layout>
